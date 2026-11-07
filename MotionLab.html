@@ -184,6 +184,16 @@ body.mode-3d .only2d { display: none !important; }
   .layout { padding: 8px; }
   .field { grid-template-columns: 110px 1fr; }
 }
+
+/* ---------- 合図で同期 ---------- */
+.sig-card .radio-row { margin: 4px 0 6px; }
+.sig-row { margin: 8px 0; }
+.sig-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
+.sig-head .mono { font-size: 12px; }
+.sig-head .btn { margin-left: auto; }
+.sig-cv { width: 100%; height: 64px; display: block; margin-top: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.map-box { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--surface); margin: 8px 0; font-size: 12.5px; }
+.map-box ul { margin: 2px 0; padding-left: 18px; }
 </style>
 </head>
 <body class="mode-2d">
@@ -310,7 +320,24 @@ body.mode-3d .only2d { display: none !important; }
         <div class="field"><label>撮影fps（実時間）</label><div class="row"><input type="number" id="fpsCap1" step="0.01" min="1" value="30"></div></div>
         <div class="field"><label>同期フレーム</label><div class="row"><input type="number" id="sync1" step="0.1" value="0"><button class="btn sm" data-sync="1">現在フレーム</button></div></div>
       </div>
-      <div class="hint-box only3d"><b>2台の同期：</b>両方の動画に写る瞬間的な出来事（手拍子・ボールの衝突・フラッシュなど）を探し、各カメラでそのフレームを「同期フレーム」に設定します。小数（例: 120.5）も入力できます。カメラ2の座標は時間補間して合わせます。</div>
+      <div class="cam-card only3d sig-card">
+        <h4>合図で2台をそろえる</h4>
+        <div class="radio-row"><label><input type="radio" name="sigMethod" value="light" checked> 光の合図</label><label><input type="radio" name="sigMethod" value="sound"> 音の合図</label></div>
+        <div id="sigLight">
+          <p class="note">両方のカメラに写る場所でライトをつけ、<b>0.5 秒以上つけたまま</b>にします（スマホのライトなど）。各カメラで光る場所を囲むと確実です（囲まないと画面全体の明るさを使います）。</p>
+          <div class="btn-row"><button class="btn sm" data-roi="0">カメラ1：光る場所を囲む</button><button class="btn sm" data-roi="1">カメラ2：光る場所を囲む</button><button class="btn sm danger" id="roiClear">囲みを消す</button></div>
+        </div>
+        <div id="sigSound" hidden>
+          <p class="note">手を叩く・拍子木など、短く大きな音を1回鳴らします。音源から各カメラまでの距離を入れると、音が届くまでの時間（343 m/s）を補正します。</p>
+          <div class="field"><label for="sigDist0">音源〜カメラ1</label><div class="row"><input type="number" id="sigDist0" step="0.5" min="0" value="0"> m</div></div>
+          <div class="field"><label for="sigDist1">音源〜カメラ2</label><div class="row"><input type="number" id="sigDist1" step="0.5" min="0" value="0"> m</div></div>
+        </div>
+        <div class="field"><label for="sigFrom">探す範囲</label><div class="row">動画の <input type="number" id="sigFrom" step="0.5" min="0" value="0" style="width:64px"> 〜 <input type="number" id="sigTo" step="0.5" min="0.5" value="10" style="width:64px"> 秒</div></div>
+        <div class="btn-row"><button class="btn primary" id="sigRun">合図を探してそろえる</button><button class="btn danger" id="sigCancel" disabled>中止</button></div>
+        <div class="progress"><div id="sigProg"></div></div>
+        <div id="sigResult"></div>
+      </div>
+      <div class="hint-box only3d"><b>手動でそろえる場合：</b>両方の動画に写る瞬間的な出来事（手拍子・ボールの衝突など）を探し、各カメラでそのフレームを「同期フレーム」に設定します。小数（例: 120.5）も入力できます。カメラ2の座標は時間補間して合わせます。</div>
       <div class="hint-box"><b>撮影のポイント</b>
         <ul>
           <li>三脚で固定し、撮影中にズーム・向きを変えない（1倍の広角レンズ推奨。超広角は歪みが大きい）</li>
@@ -498,9 +525,24 @@ body.mode-3d .only2d { display: none !important; }
 <ul>
   <li><b>2次元</b>：カメラを運動面に対して垂直に、十分離れた位置（望遠側）から三脚で固定して撮影。運動面上に長さが既知の基準（1mのバー等）を置いて撮影しておく</li>
   <li><b>3次元</b>：2台を光軸の交差角が60〜120°程度になるよう配置。分析範囲を囲む較正点（同一平面上にない6点以上、推奨8点以上：較正枠、高さの異なるポール等）を両カメラで撮影。撮影後はカメラを動かさない</li>
-  <li>同期用に、両カメラに写る瞬間的な合図（手拍子・ボールの衝突・フラッシュ）を入れる</li>
+  <li>同期用に、2台とも録画を始めてから合図を入れる：<b>光</b>（両方に写る場所でスマホのライトをつけ、0.5 秒以上つけたまま）または<b>音</b>（手を叩くなど短く大きな音を1回）</li>
   <li>速い動作は120/240fps、明るい環境で。iPhoneのスロー動画は「撮影fps」に240などを入力</li>
 </ul>
+
+<h4>合図で2台をそろえる（3次元）</h4>
+<ol>
+  <li>② 動画で2台の動画を読み込み、「合図で2台をそろえる」で光か音を選ぶ</li>
+  <li>光：各カメラで「光る場所を囲む」を押し、ライトの部分をドラッグで囲む（囲まないと画面全体の明るさを使います）</li>
+  <li>音：音源から各カメラまでの距離（m）を入れる（音が届く時間を補正。1 m で約 3 ms）</li>
+  <li>「探す範囲」を合図が入っている秒数に合わせて「合図を探してそろえる」。両カメラの同期フレームが自動で入ります</li>
+  <li>グラフの赤い線と「この瞬間を表示」で、正しい合図を見つけたか確認します</li>
+</ol>
+<table>
+  <tr><th>方法</th><th>求め方と精度の目安</th></tr>
+  <tr><td>光</td><td>囲んだ部分の明るさ（各画素の RGB の最大値の平均）を約 15 Hz で調べて最大の上昇を見つけ、その前後を1コマずつ調べます。明るさが上昇幅の 50% を越えた時刻を、コマの中心どうしの直線補間で求めます。±0.5 コマ程度（ローリングシャッターや露光時間の影響）。スロー動画でも使えます</td></tr>
+  <tr><td>音</td><td>音声の 2 ms ごとの最大振幅から最も大きな立ち上がりを探し（ノイズ＋ピークの 20% を越えた点）、2台の音の形を比べて ±8 ms の範囲でずれを細かく合わせます。±1 ms 程度。スロー動画は音と映像がずれることがあるので光を推奨</td></tr>
+</table>
+<p>光と音の両方を試すと、2つの方法の差（ms）が表示されます。fps の違うカメラ（例：60 fps と 120 fps）でもそろえられます。</p>
 
 <h4>キャリブレーション情報の入力仕様</h4>
 <table>
@@ -1980,7 +2022,7 @@ async function loadVideo(k, file) {
     });
   } catch (e) { toast(e.message, 6000); v.remove(); cam.video = null; return; }
   const hadPose = cam.pose && cam.w && (cam.w !== v.videoWidth || cam.h !== v.videoHeight);
-  cam.video = v; cam.fileName = file.name; cam.w = v.videoWidth; cam.h = v.videoHeight; cam.duration = v.duration;
+  cam.video = v; cam.file = file; cam.audio = null; cam.fileName = file.name; cam.w = v.videoWidth; cam.h = v.videoHeight; cam.duration = v.duration;
   if (hadPose) toast('読み込んだ動画の解像度がプロジェクトと異なります', 5000);
   let meta = null;
   try { meta = await parseMp4(file); } catch (e) { meta = null; }
@@ -2300,6 +2342,7 @@ function draw() {
   if ($('showSkel').checked) drawSkeleton(ctx, cam, j, T);
   if ($('showTracks').checked) drawTracks(ctx, k, j, T);
   if ($('showCom').checked) drawComOverlay(ctx, k, j, T);
+  drawSigOverlay(ctx, k, T, s);
   if (ui.trackBox && ui.trackBox.k === k) {
     const b = ui.trackBox; const [x, y] = T(b.u, b.v);
     ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
@@ -2428,7 +2471,7 @@ function drawComOverlay(ctx, k, j, T) {
   ctx.lineWidth = 2; ctx.strokeStyle = yellow; ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(x - 11, y); ctx.lineTo(x + 11, y); ctx.moveTo(x, y - 11); ctx.lineTo(x, y + 11); ctx.stroke();
 }
-function inPickMode() { return !!(ui.pick || ui.cpPick || ui.trClick || ui.editMode); }
+function inPickMode() { return !!(ui.pick || ui.cpPick || ui.trClick || ui.editMode || ui.roiPick != null); }
 function drawLoupe(ctx, cv, dpr) {
   if (!ui.pointer || !inPickMode() || ui.view === '3d') return;
   const [px, py] = ui.pointer; const src = 40, dst = 160, m = 8;
@@ -2465,10 +2508,11 @@ function updateModeHint() {
   else if (ui.cpPick) { const p = state.calib.cp[ui.cpSel]; msg = p ? `較正点 ${p.id} をクリック（${ui.view === '3d' ? 'カメラを選択' : state.cams[ui.view].name}）` : '較正点を追加してください'; }
   else if (ui.trClick) { const tr = state.tracks.find(t => t.id === ui.trSel); msg = tr ? `${tr.name} の位置をクリック` : ''; }
   else if (ui.editMode) msg = '修正モード：関節点をドラッグ';
+  else if (ui.roiPick != null) msg = `${state.cams[ui.roiPick].name}：光る場所をドラッグで囲む（Escで中止）`;
   h.hidden = !msg; h.textContent = msg;
 }
 function cancelInteractions() {
-  ui.pick = null; ui.cpPick = false; ui.trClick = false; ui.editMode = false;
+  ui.pick = null; ui.cpPick = false; ui.trClick = false; ui.editMode = false; ui.roiPick = null;
   $('cpPickMode').textContent = 'クリック入力：OFF'; $('cpPickMode').classList.remove('on');
   $('trClickMode').textContent = 'クリック入力：OFF'; $('trClickMode').classList.remove('on');
   $('editMode').textContent = '修正モード：OFF'; $('editMode').classList.remove('on');
@@ -2491,6 +2535,7 @@ function bindViewer() {
     const k = ui.view, cam = state.cams[k]; if (!cam.w || !ui.tf) return;
     const [u, v] = toImg(x, y);
     const inside = u >= 0 && v >= 0 && u <= cam.w && v <= cam.h;
+    if (e.button === 0 && inside && ui.roiPick === k) { ui.drag = { type: 'roi', k, u0: u, v0: v, rect: { x: u, y: v, w: 0, h: 0 } }; return; }
     if (e.button === 0 && inside) {
       if (ui.pick) { handlePick(k, u, v); return; }
       if (ui.cpPick) { setCpUV(k, u, v); return; }
@@ -2511,6 +2556,7 @@ function bindViewer() {
     ui.pointer = [x, y];
     const d = ui.drag;
     if (d && d.type === 'orbit') { ui.az = d.az + (x - d.x) * 0.01; ui.el = clamp(d.el + (y - d.y) * 0.01, -1.5, 1.5); draw(); return; }
+    if (d && d.type === 'roi') { const cam = state.cams[d.k]; let [u, v] = toImg(x, y); u = clamp(u, 0, cam.w); v = clamp(v, 0, cam.h); d.rect = { x: Math.min(d.u0, u), y: Math.min(d.v0, v), w: Math.abs(u - d.u0), h: Math.abs(v - d.v0) }; draw(); return; }
     if (d && d.type === 'pan') { if (ui.zoom > 1) { ui.panX = d.panX + (x - d.x); ui.panY = d.panY + (y - d.y); } draw(); return; }
     if (d && d.type === 'edit') {
       const cam = state.cams[d.k]; const lm = getLm(cam, ui.frame[d.k]);
@@ -2519,7 +2565,11 @@ function bindViewer() {
     }
     if (inPickMode()) draw();
   });
-  const end = () => { if (ui.drag) { ui.drag = null; draw(); } };
+  const end = () => {
+    const d = ui.drag;
+    if (d && d.type === 'roi') { const r = d.rect; ui.drag = null; ui.roiPick = null; if (r.w >= 3 && r.h >= 3) { state.sig.roi[d.k] = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }; toast(`${state.cams[d.k].name} の光る場所を設定しました`); } renderSig(); updateModeHint(); draw(); return; }
+    if (ui.drag) { ui.drag = null; draw(); }
+  };
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 }
 function handlePick(k, u, v) {
@@ -3070,6 +3120,244 @@ function bindTracks() {
   $('trRemove').addEventListener('click', () => { const i = state.tracks.findIndex(t => t.id === ui.trSel); if (i < 0) return; state.tracks.splice(i, 1); ui.trSel = state.tracks[0] ? state.tracks[0].id : null; ui.trClick = false; cancelInteractions(); renderTracks(); renderBvTracks(); markDirty(); draw(); });
 }
 
+/* ===== Part 6: 合図（光・音）で2台の動画をそろえる ===== */
+/*
+ * 同期フレーム sync は「コマの中心」を整数とする単位で表す（コマ j の中心時刻 = (j + 0.5) / fpsFile）。
+ *   光：明るさの 50% を越えた時刻を、コマの中心どうしの直線補間で求める（露光時間 ≒ コマ間隔のとき合図の瞬間に一致）
+ *   音：音の立ち上がりの時刻 T [s] → sync = T × fpsFile − 0.5 − （音源〜カメラ距離 / 343）× fpsCap
+ * こうすると fps の違うカメラどうしでも frameMap（τ = (j − sync)/fpsCap）がずれなく対応する。
+ */
+state.sig = { method: 'light', roi: [null, null], from: 0, to: 10, dist: [0, 0], res: { light: [null, null], sound: [null, null] } };
+const sigWork = document.createElement('canvas');
+const SOUND_SPEED = 343;
+
+function sigBrightness(cam, roi) {
+  const r = roi || { x: 0, y: 0, w: cam.w, h: cam.h };
+  const sc = Math.min(1, 96 / Math.max(r.w, r.h));
+  const w = Math.max(1, Math.round(r.w * sc)), h = Math.max(1, Math.round(r.h * sc));
+  if (sigWork.width !== w || sigWork.height !== h) { sigWork.width = w; sigWork.height = h; }
+  const ctx = sigWork.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(cam.video, r.x, r.y, r.w, r.h, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let s = 0; for (let i = 0; i < d.length; i += 4) s += Math.max(d[i], d[i + 1], d[i + 2]);
+  return s / (w * h);
+}
+const medianOf = a => { const b = a.filter(Number.isFinite).sort((x, y) => x - y); const n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : NaN; };
+
+/* 光：粗く（約15 Hz）調べて最大の明るさの上昇を見つけ、その間を1コマずつ調べる */
+async function detectLight(k, prog) {
+  const cam = state.cams[k], roi = state.sig.roi[k];
+  const n = cam.nFrames;
+  const j0 = clamp(Math.floor(state.sig.from * cam.fpsFile), 0, n - 1), j1 = clamp(Math.ceil(state.sig.to * cam.fpsFile), 0, n - 1);
+  if (j1 - j0 < 3) throw new Error(`${cam.name}：探す範囲が短すぎます`);
+  const step = Math.max(1, Math.round(cam.fpsFile / 15));
+  const samples = new Map();
+  const at = async j => { if (!samples.has(j)) { if (ui.cancel) throw new Error('中止しました'); await seekRaw(cam, j); samples.set(j, sigBrightness(cam, roi)); } return samples.get(j); };
+  const coarse = [];
+  for (let j = j0; j <= j1; j += step) { coarse.push([j, await at(j)]); prog((j - j0) / (j1 - j0) * 0.85); }
+  if (coarse[coarse.length - 1][0] !== j1) coarse.push([j1, await at(j1)]);
+  if (coarse.length < 4) throw new Error(`${cam.name}：探す範囲が短すぎます`);
+  const diffs = []; for (let i = 1; i < coarse.length; i++) diffs.push(coarse[i][1] - coarse[i - 1][1]);
+  let iStar = 1, dMax = -Infinity; for (let i = 1; i < coarse.length; i++) if (diffs[i - 1] > dMax) { dMax = diffs[i - 1]; iStar = i; }
+  const noise = 1.4826 * medianOf(diffs.map(Math.abs)) + 0.5;
+  const before = coarse.slice(Math.max(0, iStar - 10), iStar).map(x => x[1]), after = coarse.slice(iStar, iStar + 3).map(x => x[1]);
+  const base = medianOf(before), on = medianOf(after), J = on - base;
+  const curve = { x: [], y: [], unit: '明るさ' };
+  if (!(J > Math.max(6, 5 * noise))) {
+    for (const [j, b] of coarse) { curve.x.push(j); curve.y.push(b); }
+    return { ok: false, err: `${cam.name}：はっきりした明るさの変化が見つかりません（変化 ${J.toFixed(1)}、ゆらぎ ${noise.toFixed(1)}）。${roi ? '探す範囲に合図が入っているか確認してください' : '「光る場所を囲む」でライトの部分を囲むと見つけやすくなります'}`, curve };
+  }
+  // 1コマずつ（上昇の前後）
+  const a = coarse[iStar - 1][0], b = coarse[iStar][0];
+  for (let j = Math.max(j0, a - 1); j <= Math.min(j1, b + 1); j++) await at(j);
+  prog(1);
+  const lvl = base + 0.5 * J;
+  let kx = -1; for (let j = Math.max(j0, a - 1); j <= Math.min(j1, b + 1); j++) if (samples.get(j) > lvl) { kx = j; break; }
+  if (kx <= j0) return { ok: false, err: `${cam.name}：合図が探す範囲の最初にあります。範囲を前に広げてください`, curve };
+  const bp = samples.get(kx - 1), bk = samples.get(kx);
+  const frac = bk > bp ? clamp((lvl - bp) / (bk - bp), 0, 1) : 0.5;
+  const sync = kx - 1 + frac;
+  const keys = [...samples.keys()].sort((p, q) => p - q);
+  for (const j of keys) { curve.x.push(j); curve.y.push(samples.get(j)); }
+  return { ok: true, sync, t: (sync + 0.5) / cam.fpsFile, base, on, J, noise, curve, mark: sync, level: lvl, roi: !!roi };
+}
+
+/* 音：動画の音声を読み、最大の立ち上がりを探す */
+async function audioOfCam(k) {
+  const cam = state.cams[k];
+  if (cam.audio && cam.audio.file === cam.file) return cam.audio;
+  if (!cam.file) throw new Error(`${cam.name}：動画ファイルをもう一度読み込んでください（音声の解析には元のファイルが必要です）`);
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) throw new Error('このブラウザでは音声を解析できません');
+  const ac = new AC(); let buf;
+  try { buf = await ac.decodeAudioData(await cam.file.arrayBuffer()); }
+  catch (e) { throw new Error(`${cam.name}：音声を読み込めません（音声のない動画、または対応していない形式）`); }
+  finally { if (ac.close) ac.close(); }
+  let ch = buf.getChannelData(0);
+  if (buf.numberOfChannels > 1) { const b = buf.getChannelData(1), m = new Float32Array(ch.length); for (let i = 0; i < m.length; i++) m[i] = (ch[i] + b[i]) / 2; ch = m; }
+  cam.audio = { file: cam.file, ch, sr: buf.sampleRate, dur: buf.duration };
+  return cam.audio;
+}
+function audioEnvelope(ch, sr, t0, t1, win) {
+  const w = Math.max(1, Math.round(win * sr)), a = Math.max(0, Math.floor(t0 * sr)), b = Math.min(ch.length, Math.ceil(t1 * sr));
+  const n = Math.max(0, Math.floor((b - a) / w)), env = new Float32Array(n);
+  for (let k = 0; k < n; k++) { let m = 0; const o = a + k * w; for (let i = 0; i < w; i++) { const v = Math.abs(ch[o + i]); if (v > m) m = v; } env[k] = m; }
+  return { env, t0: a / sr, dt: w / sr };
+}
+async function detectSound(k) {
+  const cam = state.cams[k], A = await audioOfCam(k);
+  const t0 = Math.max(0, state.sig.from), t1 = Math.min(A.dur, state.sig.to);
+  if (t1 - t0 < 0.1) throw new Error(`${cam.name}：探す範囲が短すぎます`);
+  const E = audioEnvelope(A.ch, A.sr, t0, t1, 0.002);
+  let kp = -1, pk = 0; for (let i = 0; i < E.env.length; i++) if (E.env[i] > pk) { pk = E.env[i]; kp = i; }
+  const noise = medianOf(Array.from(E.env));
+  const curve = { x: [], y: [], unit: '音の大きさ', time: true };
+  const cs = Math.max(1, Math.floor(E.env.length / 900)); for (let i = 0; i < E.env.length; i += cs) { curve.x.push(E.t0 + i * E.dt); curve.y.push(E.env[i]); }
+  if (kp < 0 || !(pk > 5 * noise + 1e-4)) return { ok: false, err: `${cam.name}：はっきりした合図の音が見つかりません`, curve };
+  // ピークの前で、ノイズ + ピークの 20% を越えた最初の点（最大 80 ms 前まで）
+  const lim = noise + 0.2 * (pk - noise); let i = kp;
+  while (i > 0 && kp - i < Math.round(0.08 / E.dt) && E.env[i - 1] > lim) i--;
+  // 0.1 ms 単位で立ち上がりを細かく求める
+  const F = audioEnvelope(A.ch, A.sr, Math.max(0, E.t0 + (i - 2) * E.dt), E.t0 + (i + 2) * E.dt, 0.0001);
+  let tOn = E.t0 + i * E.dt;
+  for (let q = 0; q < F.env.length; q++) if (F.env[q] > lim) { tOn = F.t0 + q * F.dt; break; }
+  return { ok: true, tRaw: tOn, peak: pk, noise, snr: pk / Math.max(noise, 1e-6), curve, A };
+}
+// 2台の立ち上がりの形を比べて、相対的なずれを細かく合わせる（±8 ms）
+function refineSoundPair(r0, r1) {
+  const win = 0.00025, pre = 0.02, post = 0.1;
+  const e = r => { const E = audioEnvelope(r.A.ch, r.A.sr, r.tRaw - pre - 0.01, r.tRaw + post + 0.01, win); const s = new Float32Array(E.env.length); for (let i = 0; i < s.length; i++) { let a = 0, c = 0; for (let q = Math.max(0, i - 2); q <= Math.min(s.length - 1, i + 2); q++) { a += E.env[q]; c++; } s[i] = a / c; } let m = 0; for (const v of s) m = Math.max(m, v); for (let i = 0; i < s.length; i++) s[i] /= m || 1; return s; };
+  const a = e(r0), b = e(r1), L = Math.round(0.008 / win), n = Math.min(a.length, b.length) - 2 * L - 1;
+  if (n < 20) return 0;
+  let best = 0, bv = -Infinity;
+  for (let lag = -L; lag <= L; lag++) { let s = 0; for (let i = L; i < L + n; i++) s += a[i] * b[i + lag]; if (s > bv) { bv = s; best = lag; } }
+  return best * win;
+}
+
+async function runSigSync() {
+  if (ui.busy) return;
+  if (state.mode !== '3d') { toast('3次元分析のときに使います'); return; }
+  if (!state.cams[0].video || !state.cams[1].video) { toast('カメラ1とカメラ2の動画を読み込んでください'); return; }
+  const method = state.sig.method;
+  if (ui.playing) togglePlay();
+  cancelInteractions();
+  ui.cancel = false; setBusy('sync'); $('sigRun').disabled = true; $('sigCancel').disabled = false;
+  const res = [null, null];
+  const prog = (k, p) => { $('sigProg').style.width = `${(k + p) / 2 * 100}%`; };
+  try {
+    if (method === 'light') {
+      for (const k of [0, 1]) res[k] = await detectLight(k, p => prog(k, p));
+    } else {
+      for (const k of [0, 1]) { prog(k, 0.1); res[k] = await detectSound(k); prog(k, 1); }
+      if (res[0].ok && res[1].ok) {
+        const d = refineSoundPair(res[0], res[1]);
+        res[1].tRaw += d; res[1].refine = d;
+        for (const k of [0, 1]) {
+          const c = state.cams[k], r = res[k];
+          r.delay = (state.sig.dist[k] || 0) / SOUND_SPEED;
+          r.t = r.tRaw; r.sync = r.tRaw * c.fpsFile - 0.5 - r.delay * c.fpsCap; r.mark = r.tRaw;
+        }
+      }
+    }
+    state.sig.res[method] = res;
+    if (res[0].ok && res[1].ok) {
+      state.cams[0].sync = Math.round(res[0].sync * 100) / 100; state.cams[1].sync = Math.round(res[1].sync * 100) / 100;
+      markDirty(); syncVideoInputs();
+      toast(`${method === 'light' ? '光' : '音'}の合図で2台をそろえました（カメラ1 F${state.cams[0].sync.toFixed(2)}、カメラ2 F${state.cams[1].sync.toFixed(2)}）`, 5000);
+    } else toast([res[0], res[1]].filter(r => !r.ok).map(r => r.err).join(' ／ '), 7000);
+  } catch (e) { toast(e.message || String(e), 6000); }
+  finally {
+    setBusy(null); $('sigRun').disabled = false; $('sigCancel').disabled = true; $('sigProg').style.width = '100%';
+    renderSig();
+    for (const k of [0, 1]) if (state.cams[k].video) { state.cams[k].shown = -1; }
+    const k = ui.view === '3d' ? 0 : ui.view;
+    const r = state.sig.res[method][k];
+    await showFrame(k, r && r.ok ? Math.round(r.sync) : ui.frame[k]);
+    if (state.mode === '3d') { const o = 1 - k; if (state.cams[o].video) await showFrame(o, Math.round(frameMap(k, ui.frame[k], o))); }
+  }
+}
+
+function drawSigCurve(cv, r, cam) {
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth || 300, H = cv.clientHeight || 64;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const c = r && r.curve; if (!c || c.x.length < 2) return;
+  let x0 = c.x[0], x1 = c.x[c.x.length - 1];
+  if (r.ok) { const m = c.time ? r.mark : r.mark; const span = c.time ? 0.5 : Math.max(8, cam.fpsFile * 0.25); x0 = Math.max(x0, m - span); x1 = Math.min(x1, m + span); }
+  let y0 = Infinity, y1 = -Infinity; for (let i = 0; i < c.x.length; i++) if (c.x[i] >= x0 && c.x[i] <= x1) { y0 = Math.min(y0, c.y[i]); y1 = Math.max(y1, c.y[i]); }
+  if (!(y1 > y0)) { y0 -= 1; y1 += 1; }
+  const X = v => 4 + (v - x0) / (x1 - x0) * (W - 8), Y = v => H - 12 - (v - y0) / (y1 - y0) * (H - 22);
+  ctx.strokeStyle = cssVar('--grid'); ctx.beginPath(); ctx.moveTo(0, H - 11.5); ctx.lineTo(W, H - 11.5); ctx.stroke();
+  ctx.strokeStyle = cssVar('--s1'); ctx.lineWidth = 1.5; ctx.beginPath(); let p = false;
+  for (let i = 0; i < c.x.length; i++) { if (c.x[i] < x0 || c.x[i] > x1) continue; const x = X(c.x[i]), y = Y(c.y[i]); p ? ctx.lineTo(x, y) : ctx.moveTo(x, y); p = true; }
+  ctx.stroke();
+  if (!c.time) { ctx.fillStyle = cssVar('--s1'); for (let i = 0; i < c.x.length; i++) if (c.x[i] >= x0 && c.x[i] <= x1) { ctx.beginPath(); ctx.arc(X(c.x[i]), Y(c.y[i]), 2, 0, Math.PI * 2); ctx.fill(); } }
+  if (r.ok) {
+    if (r.level != null) { ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = cssVar('--muted'); ctx.beginPath(); ctx.moveTo(0, Y(r.level)); ctx.lineTo(W, Y(r.level)); ctx.stroke(); ctx.restore(); }
+    ctx.fillStyle = cssVar('--danger'); ctx.fillRect(X(r.mark) - 1, 2, 2, H - 14);
+  }
+  ctx.fillStyle = cssVar('--muted'); ctx.font = `10px ${cssVar('--font')}`; ctx.textBaseline = 'bottom';
+  ctx.textAlign = 'left'; ctx.fillText(c.time ? `${x0.toFixed(2)} s` : `F${Math.round(x0)}`, 4, H); ctx.textAlign = 'right'; ctx.fillText(c.time ? `${x1.toFixed(2)} s` : `F${Math.round(x1)}`, W - 4, H);
+  ctx.textAlign = 'center'; ctx.fillText(`${c.unit}（赤＝合図）`, W / 2, H);
+}
+function renderSig() {
+  const S = state.sig;
+  document.querySelectorAll('input[name=sigMethod]').forEach(r => r.checked = r.value === S.method);
+  $('sigLight').hidden = S.method !== 'light'; $('sigSound').hidden = S.method !== 'sound';
+  $('sigFrom').value = S.from; $('sigTo').value = S.to; $('sigDist0').value = S.dist[0]; $('sigDist1').value = S.dist[1];
+  for (const k of [0, 1]) { const r = S.roi[k], b = document.querySelector(`[data-roi="${k}"]`); b.textContent = `カメラ${k + 1}：${r ? '囲み直す' : '光る場所を囲む'}`; b.title = r ? `${Math.round(r.w)}×${Math.round(r.h)} px` : '囲まないと画面全体の明るさを使います'; }
+  const box = $('sigResult'); box.innerHTML = '';
+  const res = S.res[S.method];
+  if (!res || (!res[0] && !res[1])) return;
+  for (const k of [0, 1]) {
+    const r = res[k], cam = state.cams[k]; if (!r) continue;
+    const row = el('div', { class: 'sig-row' });
+    const txt = r.ok ? (S.method === 'light' ? `F ${r.sync.toFixed(2)}（${r.t.toFixed(3)} s）・明るさ ${r.base.toFixed(0)} → ${r.on.toFixed(0)}${r.roi ? '' : '（画面全体）'}`
+      : `F ${r.sync.toFixed(2)}（音 ${r.tRaw.toFixed(4)} s${r.delay ? `、音の遅れ −${(r.delay * 1000).toFixed(1)} ms` : ''}）・S/N ${r.snr.toFixed(0)}`) : r.err;
+    row.append(el('div', { class: 'sig-head' }, el('b', { text: cam.name }), ' ', el('span', { class: r.ok ? 'mono' : 'note err', text: txt }),
+      r.ok ? el('button', { class: 'btn sm', text: 'この瞬間を表示', onclick: async () => { setView(k); await showFrame(k, Math.round(r.sync)); } }) : null));
+    const cv = el('canvas', { class: 'sig-cv' }); row.append(cv); box.append(row);
+    requestAnimationFrame(() => drawSigCurve(cv, r, cam));
+  }
+  if (res[0] && res[1] && res[0].ok && res[1].ok) {
+    const c0 = state.cams[0], c1 = state.cams[1];
+    const lag = (res[1].sync + 0.5) / c1.fpsCap - (res[0].sync + 0.5) / c0.fpsCap;
+    const lines = [`カメラ2はカメラ1より ${Math.abs(lag).toFixed(3)} s ${lag >= 0 ? '早く' : '遅く'}撮影を始めています（同期フレームに設定済み）`];
+    const other = S.res[S.method === 'light' ? 'sound' : 'light'];
+    if (other && other[0] && other[1] && other[0].ok && other[1].ok) {
+      const lagO = (other[1].sync + 0.5) / c1.fpsCap - (other[0].sync + 0.5) / c0.fpsCap;
+      lines.push(`${S.method === 'light' ? '音' : '光'}の合図との差：${((lag - lagO) * 1000).toFixed(1)} ms（${(Math.abs(lag - lagO) * Math.max(c0.fpsCap, c1.fpsCap)).toFixed(2)} コマ）`);
+    }
+    if (S.method === 'sound' && (Math.abs(c0.fpsCap - c0.fpsFile) > 0.5 || Math.abs(c1.fpsCap - c1.fpsFile) > 0.5)) lines.push('スロー動画では音と映像がずれていることがあります。光の合図でも確かめてください');
+    const prec = S.method === 'light' ? `精度の目安：±0.5 コマ（${(500 / Math.min(c0.fpsCap, c1.fpsCap)).toFixed(1)} ms）程度` : '精度の目安：±1 ms 程度（音源までの距離の入力が正しい場合）';
+    lines.push(prec);
+    const ul = el('ul'); lines.forEach(t => ul.append(el('li', { text: t })));
+    box.append(el('div', { class: 'map-box' }, ul));
+  }
+}
+
+function bindSig() {
+  document.querySelectorAll('input[name=sigMethod]').forEach(r => r.addEventListener('change', () => { state.sig.method = r.value; renderSig(); }));
+  document.querySelectorAll('[data-roi]').forEach(b => b.addEventListener('click', () => {
+    const k = +b.dataset.roi; if (!state.cams[k].video) { toast(`${state.cams[k].name}の動画を読み込んでください`); return; }
+    cancelInteractions(); setView(k); ui.roiPick = k; updateModeHint();
+  }));
+  $('roiClear').addEventListener('click', () => { state.sig.roi = [null, null]; renderSig(); draw(); });
+  $('sigFrom').addEventListener('change', e => { state.sig.from = Math.max(0, parseFloat(e.target.value) || 0); renderSig(); });
+  $('sigTo').addEventListener('change', e => { state.sig.to = Math.max(state.sig.from + 0.2, parseFloat(e.target.value) || 10); renderSig(); });
+  for (const k of [0, 1]) $('sigDist' + k).addEventListener('change', e => { state.sig.dist[k] = Math.max(0, parseFloat(e.target.value) || 0); });
+  $('sigRun').addEventListener('click', runSigSync);
+  $('sigCancel').addEventListener('click', () => { ui.cancel = true; });
+}
+function drawSigOverlay(ctx, k, T, s) {
+  if (state.mode !== '3d') return;
+  const rr = ui.drag && ui.drag.type === 'roi' && ui.drag.k === k ? ui.drag.rect : state.sig.roi[k];
+  if (!rr) return;
+  const [x, y] = T(rr.x, rr.y);
+  ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 2; ctx.strokeStyle = '#000'; ctx.strokeRect(x, y, rr.w * s, rr.h * s);
+  ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, rr.w * s, rr.h * s); ctx.restore();
+  ctx.font = `700 12px ${cssVar('--font')}`; ctx.fillStyle = 'rgba(13,13,12,.8)'; ctx.fillRect(x, y - 18, 58, 17); ctx.fillStyle = '#ffd60a'; ctx.textBaseline = 'middle'; ctx.fillText('光の合図', x + 4, y - 9);
+}
+
 /* ===== Part 5: 解析・グラフ・3D表示・出力・初期化 ===== */
 
 /* ---------- 解析入力の組み立て ---------- */
@@ -3560,7 +3848,7 @@ function projectToJSON() {
     type: 'MotionLabProject', version: APP_VERSION, savedAt: new Date().toISOString(),
     mode: state.mode, subject: state.subject, bspKey: state.bspKey, bsp: state.bsp, filter: state.filter, held: state.held,
     model: state.model, numPoses: state.numPoses, minConf: state.minConf, range: state.range, calib: calibToJSON(),
-    tracks: state.tracks, events: state.events, bv: state.bv,
+    tracks: state.tracks, events: state.events, bv: state.bv, sig: { method: state.sig.method, roi: state.sig.roi, from: state.sig.from, to: state.sig.to, dist: state.sig.dist },
     cams: state.cams.map(c => ({ name: c.name, fileName: c.fileName, w: c.w, h: c.h, duration: c.duration, fpsFile: c.fpsFile, fpsCap: c.fpsCap, fpsCapSet: !!c.fpsCapSet, sync: c.sync, nFrames: c.nFrames, target: c.target,
       pose: c.pose ? { f0: c.pose.f0, n: c.pose.n, model: c.pose.model, data: f32ToB64(c.pose.data), world: f32ToB64(c.pose.world) } : null })),
   };
@@ -3575,6 +3863,7 @@ function projectFromJSON(o) {
   state.tracks = (o.tracks || []).map(t => Object.assign({ pts: [{}, {}] }, t));
   trSeq = state.tracks.reduce((m, t) => Math.max(m, parseInt(String(t.id).slice(1)) || 0), 0) + 1;
   state.events = o.events || []; state.bv = o.bv || { results: [] };
+  if (o.sig) Object.assign(state.sig, o.sig, { res: { light: [null, null], sound: [null, null] } });
   (o.cams || []).forEach((oc, k) => {
     const c = state.cams[k];
     const keepVideo = c.video && c.w === oc.w && c.h === oc.h;
@@ -3585,7 +3874,7 @@ function projectFromJSON(o) {
   setMode(o.mode || '2d');
   calibFromJSON(o.calib);
   state.res = null;
-  syncSetupInputs(); syncVideoInputs(); renderRange(); renderTracks(); renderBvTracks(); renderEvents(); renderBv(); updatePoseSummary();
+  syncSetupInputs(); syncVideoInputs(); renderRange(); renderTracks(); renderBvTracks(); renderEvents(); renderBv(); updatePoseSummary(); renderSig();
   ui.chart.sel = [];
   $('resInfo').textContent = ''; populateGroups(); drawChart(); draw();
   const need = state.cams.filter((c, k) => (k === 0 || state.mode === '3d') && !c.video && c.fileName).map(c => `${c.name}: ${c.fileName}`);
@@ -3637,11 +3926,11 @@ function bindTabs() {
 }
 
 function init() {
-  bindSetup(); bindVideo(); bindTimeline(); bindViewer(); bindCalib(); bindPose(); bindTracks(); bindResults(); bindExport(); bindTabs(); bindChart();
+  bindSetup(); bindVideo(); bindTimeline(); bindViewer(); bindCalib(); bindPose(); bindTracks(); bindResults(); bindExport(); bindTabs(); bindChart(); bindSig(); renderSig();
   setMode('2d'); syncSetupInputs(); syncVideoInputs(); renderTracks(); renderBvTracks(); renderEvents(); renderExportOptions(); updateTimeline(); renderRange(); draw(); drawChart();
   setEngine('未読込（初回の推定時に読み込みます）');
   getDownloads();
-  window.MLApp = { state, ui, runAnalysis, runPose, loadVideo, showFrame, exportXlsx, projectToJSON, projectFromJSON, setView, computeCalibration, autoTrack, setTrackPoint, addTrack, setRange, C };
+  window.MLApp = { state, ui, runAnalysis, runPose, loadVideo, showFrame, exportXlsx, projectToJSON, projectFromJSON, setView, computeCalibration, autoTrack, setTrackPoint, addTrack, setRange, frameMap, runSigSync, C };
 }
 init();
 
