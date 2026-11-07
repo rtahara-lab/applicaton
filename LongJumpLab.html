@@ -1,0 +1,2574 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>LongJumpLab — 走り幅跳び分析</title>
+<style>:root {
+  color-scheme: light;
+  --bg: #f1f1ee; --surface: #fcfcfb; --surface-2: #f3f3f0; --surface-3: #e9e8e4;
+  --border: #dcdbd6; --border-strong: #c3c2b7;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #7c7a75;
+  --accent: #2a78d6; --accent-ink: #ffffff; --accent-soft: #e3eefb;
+  --danger: #c73b3a; --ok: #0a7a2f; --warn: #a86a00;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --grid: #e6e5e0; --axis: #c3c2b7;
+  --stage: #0d0d0c;
+  --radius: 8px;
+  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #222220; --surface-3: #2b2b29;
+    --border: #353532; --border-strong: #4a4945;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8d87;
+    --accent: #3987e5; --accent-ink: #ffffff; --accent-soft: #1d2c40;
+    --danger: #e66767; --ok: #3fb26a; --warn: #d9a03a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --grid: #2a2a28; --axis: #383835;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
+
+/* ---------- header ---------- */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+.brand { display: flex; align-items: baseline; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: .02em; }
+.brand .logo { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--text); color: var(--surface); font-size: 13px; align-self: center; }
+.brand small { font-weight: 400; color: var(--text-2); font-size: 12px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); }
+.badge { padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12px; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: middle; }
+.status-dot.ok { background: var(--ok); } .status-dot.busy { background: var(--warn); } .status-dot.err { background: var(--danger); }
+
+/* ---------- layout ---------- */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 12px; padding: 12px; align-items: start; }
+@media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+.viewer-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; }
+@media (max-width: 1000px) { .viewer-col { position: static; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+
+.viewer-toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 6px 8px; }
+.toolbar-group { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
+.toolbar-group label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 4px 12px; cursor: pointer; color: var(--text-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.active { background: var(--text); color: var(--surface); }
+.seg button:disabled { opacity: .35; cursor: not-allowed; }
+
+.stage { position: relative; background: var(--stage); border-radius: var(--radius); overflow: hidden; height: min(62vh, 640px); min-height: 280px; touch-action: none; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.drop-hint { position: absolute; inset: 0; display: grid; place-items: center; color: #9a9893; font-size: 14px; pointer-events: none; text-align: center; padding: 20px; }
+.mode-hint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(20,20,19,.86); color: #f0efec; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; pointer-events: none; white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
+.stage-msg { position: absolute; right: 10px; bottom: 10px; background: rgba(20,20,19,.86); color: #f0efec; padding: 4px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; }
+
+.timeline { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.tl-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tl-row input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+.tl-row.small { font-size: 12.5px; color: var(--text-2); }
+.tl-row input[type=number] { width: 78px; }
+.frame-info { min-width: 170px; text-align: right; font-size: 12.5px; }
+.range-bar { position: relative; height: 6px; background: var(--surface-3); border-radius: 3px; margin: 0 2px; }
+.range-bar .fill { position: absolute; top: 0; bottom: 0; background: var(--accent); opacity: .55; border-radius: 3px; }
+.range-bar .ev { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--s2); }
+
+/* ---------- controls ---------- */
+.btn, button.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 11px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.07); background: var(--accent); }
+.btn.danger { color: var(--danger); }
+.btn.on { background: var(--text); color: var(--surface); border-color: var(--text); }
+.btn.sm { padding: 2px 8px; font-size: 12.5px; }
+.icon-btn { width: 32px; padding: 4px 0; }
+input[type=number], input[type=text], select, textarea { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 4px 7px; min-width: 0; }
+input[type=number] { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+textarea { width: 100%; font-family: var(--mono); font-size: 12px; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- side panel ---------- */
+.panel-col { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px; }
+.tabs button { border: 1px solid transparent; background: transparent; padding: 7px 4px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: 13px; }
+.tabs button:hover { background: var(--surface-2); }
+.tabs button.active { background: var(--text); color: var(--surface); font-weight: 600; }
+.tab { display: none; padding: 4px 14px 16px; }
+.tab.active { display: block; }
+.tab h3 { font-size: 13px; margin: 16px 0 8px; color: var(--text-2); letter-spacing: .04em; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.tab h3::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.field { display: grid; grid-template-columns: 128px 1fr; gap: 6px 10px; align-items: center; margin: 6px 0; }
+.field > label, .field > .lbl { color: var(--text-2); font-size: 13px; }
+.field .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.field input[type=number] { width: 96px; }
+.note { font-size: 12.5px; color: var(--text-2); margin: 6px 0; }
+.note.warn { color: var(--warn); }
+.note.err { color: var(--danger); }
+.note.okc { color: var(--ok); }
+.hint-box { font-size: 12.5px; color: var(--text-2); background: var(--surface-2); border-radius: 7px; padding: 8px 10px; margin: 8px 0; }
+.hint-box ul { margin: 4px 0; padding-left: 18px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
+.radio-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.radio-row label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.cam-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: var(--surface-2); }
+.cam-card h4 { margin: 0 0 6px; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center; }
+.kv { font-size: 12.5px; color: var(--text-2); }
+.progress { height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; margin: 6px 0; }
+.progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .15s; }
+details { margin: 8px 0; }
+details > summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
+.tbl-wrap { overflow: auto; max-height: 300px; border: 1px solid var(--border); border-radius: 7px; }
+table.tbl { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+table.tbl th, table.tbl td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+table.tbl th { position: sticky; top: 0; background: var(--surface-2); color: var(--text-2); font-weight: 600; z-index: 1; }
+table.tbl td:first-child, table.tbl th:first-child { text-align: left; }
+table.tbl td input { width: 66px; padding: 2px 4px; }
+table.tbl tr.sel td { background: var(--accent-soft); }
+table.tbl td.mono { font-family: var(--mono); }
+.list { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.list-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); cursor: pointer; }
+.list-item.sel { border-color: var(--accent); background: var(--accent-soft); }
+.list-item .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.chk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 10px; font-size: 13px; }
+.chk-grid label { display: flex; gap: 6px; align-items: center; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-box { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface-2); margin: 8px 0; font-size: 13px; }
+.result-box .big { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- results ---------- */
+.results { margin: 0 12px 16px; padding: 12px 14px; }
+.results-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.results-head h2 { font-size: 15px; margin: 0; }
+.dirty { font-size: 12.5px; color: var(--warn); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0 6px; font-size: 13px; color: var(--text-2); }
+.filters select { max-width: 260px; }
+.series-pick { display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow: auto; margin-bottom: 6px; }
+.chip { border: 1px solid var(--border-strong); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; background: var(--surface); color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
+.chip.on { color: var(--text); border-color: var(--text); background: var(--surface-2); }
+.chip .key { width: 14px; height: 2px; border-radius: 1px; }
+.chart-wrap { position: relative; height: 320px; background: var(--surface); }
+.chart-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); min-width: 150px; z-index: 5; }
+.tip .t { color: var(--muted); margin-bottom: 3px; }
+.tip .r { display: flex; align-items: center; gap: 7px; }
+.tip .r b { font-variant-numeric: tabular-nums; }
+.tip .r span { color: var(--text-2); }
+.tip .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); margin: 6px 0; }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.legend .key { width: 16px; height: 2px; border-radius: 1px; }
+.empty { color: var(--muted); font-size: 13px; padding: 30px; text-align: center; }
+
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--surface); padding: 8px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100; max-width: 90vw; }
+#toast.show { opacity: 1; }
+.help h4 { margin: 14px 0 4px; font-size: 13.5px; }
+.help p, .help li { font-size: 13px; color: var(--text-2); }
+.help ol, .help ul { padding-left: 18px; margin: 4px 0; }
+.help code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
+.help table { font-size: 12px; border-collapse: collapse; width: 100%; margin: 6px 0; }
+.help td, .help th { border-bottom: 1px solid var(--border); padding: 3px 4px; text-align: left; vertical-align: top; }
+body.mode-2d .only3d { display: none !important; }
+body.mode-3d .only2d { display: none !important; }
+@media (max-width: 640px) {
+  .brand small { display: none; }
+  .topbar { padding: 6px 10px; }
+  .topbar-right { font-size: 11px; }
+  .stage { height: 46vh; }
+  .layout { padding: 8px; }
+  .field { grid-template-columns: 110px 1fr; }
+}
+
+/* ---------- 走り幅跳び：結果タイル ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
+.kpi { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 2px; }
+.kpi .k { font-size: 12px; color: var(--text-2); }
+.kpi .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; line-height: 1.2; }
+.kpi .v small { font-size: 13px; font-weight: 500; color: var(--text-2); margin-left: 3px; }
+.kpi .d { font-size: 11.5px; color: var(--muted); }
+.kpi.main { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.kpi.vx .k::before, .kpi.vy .k::before { content: ""; display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.kpi.vx .k::before { background: var(--s1); } .kpi.vy .k::before { background: var(--s2); }
+.sec-title { font-size: 13px; font-weight: 700; color: var(--text-2); margin: 14px 0 4px; letter-spacing: .04em; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.chart-box { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: var(--surface); }
+.chart-box h4 { margin: 0 0 4px; font-size: 13px; }
+.chart-box .chart-wrap { height: 250px; }
+.ev-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.ev-row .nm { font-size: 13px; }
+.ev-row .nm small { display: block; color: var(--text-2); font-size: 11.5px; }
+.ev-row .val { min-width: 70px; text-align: right; }
+.dot-ev { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">LJ</span>LongJumpLab <small>走り幅跳びの助走・踏切分析（横からのスマホ映像）</small></div>
+  <div class="topbar-right"><span><span id="engineDot" class="status-dot"></span><span id="engineStatus">姿勢推定エンジン: 未読込</span></span></div>
+</header>
+
+<main class="layout">
+  <section class="viewer-col">
+    <div class="card viewer-toolbar">
+      <div class="toolbar-group">
+        <label><input type="checkbox" id="showSkel" checked>骨格</label>
+        <label><input type="checkbox" id="showPath" checked>重心の軌跡</label>
+        <label><input type="checkbox" id="showVec" checked>踏切の速度ベクトル</label>
+        <label><input type="checkbox" id="showCalib" checked>較正点</label>
+      </div>
+      <div class="toolbar-group">
+        <button class="btn icon-btn" id="zoomOut" title="縮小">−</button>
+        <button class="btn sm" id="zoomReset">全体</button>
+        <button class="btn icon-btn" id="zoomIn" title="拡大">＋</button>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="view"></canvas>
+      <div id="dropHint" class="drop-hint">「① 動画」タブから横から撮った走り幅跳びの動画を読み込んでください</div>
+      <div id="modeHint" class="mode-hint" hidden></div>
+    </div>
+    <div class="card timeline">
+      <div class="tl-row">
+        <button class="btn icon-btn" id="btnPrev10" title="10コマ戻る (Shift+←)">«</button>
+        <button class="btn icon-btn" id="btnPrev" title="1コマ戻る (←)">‹</button>
+        <button class="btn icon-btn" id="btnPlay" title="再生/停止 (Space)">▶</button>
+        <button class="btn icon-btn" id="btnNext" title="1コマ進む (→)">›</button>
+        <button class="btn icon-btn" id="btnNext10" title="10コマ進む (Shift+→)">»</button>
+        <input type="range" id="frameSlider" min="0" max="0" value="0" aria-label="フレーム">
+        <span id="frameInfo" class="mono frame-info">—</span>
+      </div>
+      <div class="range-bar" id="rangeBar"><div class="fill" id="rangeFill"></div></div>
+      <div class="tl-row small">
+        <span>解析範囲</span>
+        <input id="rangeStart" type="number" min="0" value="0" aria-label="開始フレーム">
+        <button class="btn sm" id="setStart">開始＝現在</button>
+        <span>〜</span>
+        <input id="rangeEnd" type="number" min="0" value="0" aria-label="終了フレーム">
+        <button class="btn sm" id="setEnd">終了＝現在</button>
+        <span id="rangeInfo" class="mono"></span>
+        <span style="flex:1"></span>
+        <label>再生速度 <select id="playRate"><option value="0.1">0.1×</option><option value="0.25" selected>0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option></select></label>
+      </div>
+    </div>
+  </section>
+
+  <aside class="card panel-col">
+    <nav class="tabs" id="tabs" style="grid-template-columns: repeat(3, 1fr)">
+      <button data-tab="video" class="active">① 動画・設定</button>
+      <button data-tab="calib">② 較正</button>
+      <button data-tab="track">③ 追跡</button>
+      <button data-tab="events">④ 局面</button>
+      <button data-tab="export">⑤ 保存</button>
+      <button data-tab="help">使い方</button>
+    </nav>
+
+    <section class="tab active" id="tab-video">
+      <h3>動画</h3>
+      <input type="file" id="file0" accept="video/*,.mov,.mp4,.m4v,.webm">
+      <div class="kv" id="camInfo">未読込</div>
+      <div class="field"><label for="fpsFile">ファイルのfps</label><div class="row"><input type="number" id="fpsFile" step="0.01" min="1" value="30"><button class="btn sm" id="detectFps">自動検出</button></div></div>
+      <div class="field"><label for="fpsCap">撮影fps（実時間）</label><div class="row"><input type="number" id="fpsCap" step="0.01" min="1" value="30"><span class="note">スロー動画は撮影時のfps</span></div></div>
+      <p class="note warn" id="fpsWarn" hidden>接地時間は約0.1秒です。正確に測るには 120fps 以上（できれば 240fps）で撮影してください。</p>
+      <h3>選手と計算の設定</h3>
+      <div class="field"><span class="lbl">踏切足</span><div class="radio-row"><label><input type="radio" name="foot" value="l"> 左足</label><label><input type="radio" name="foot" value="r" checked> 右足</label></div></div>
+      <div class="field"><span class="lbl">性別</span><div class="radio-row"><label><input type="radio" name="sex" value="m" checked> 男性</label><label><input type="radio" name="sex" value="f"> 女性</label></div></div>
+      <div class="field"><span class="lbl">追う点</span><div class="radio-row" style="flex-direction:column;gap:4px">
+        <label><input type="radio" name="point" value="com" checked> 身体重心（姿勢推定・推奨）</label>
+        <label><input type="radio" name="point" value="hip"> 腰（左右の股関節の中点・姿勢推定）</label>
+        <label><input type="radio" name="point" value="manual"> 腰（手動でクリック）</label></div></div>
+      <div class="field"><span class="lbl">走る向き</span><div class="radio-row"><label><input type="radio" name="dir" value="auto" checked> 自動</label><label><input type="radio" name="dir" value="right"> 右へ</label><label><input type="radio" name="dir" value="left"> 左へ</label></div></div>
+      <div class="field"><label for="cutoff">遮断周波数</label><div class="row"><input type="number" id="cutoff" step="0.5" min="0" value="8"> Hz <span class="note">平滑化（0でなし）</span></div></div>
+      <div class="hint-box"><b>撮影のポイント</b>
+        <ul>
+          <li>踏切板の真横、助走路から 8〜15 m 離れた位置に三脚で固定（カメラを振らない）</li>
+          <li>踏切の2〜3歩前から着地前までが画面に入るように撮る</li>
+          <li>120fps 以上（スロー撮影）を推奨。明るい時間帯に撮る</li>
+          <li>助走路の上（選手が走るライン上）に、距離が分かる2つの目印（コーンなど）を置いて写す</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="tab" id="tab-calib">
+      <h3>較正（長さの基準）</h3>
+      <div class="radio-row"><label><input type="radio" name="cm" value="scale" checked> 2点（推奨）</label><label><input type="radio" name="cm" value="plane"> 4点以上（カメラが斜めのとき）</label></div>
+      <div id="cScale">
+        <p class="note">助走路の上で距離が分かる2点（例：5 m 離して置いたコーンの根元）を、後ろ側を P1、踏切側を P2 としてクリックします。P1 が原点・地面の高さ 0 になり、P1→P2 の向きが水平になります。</p>
+        <table class="tbl"><thead><tr><th>点</th><th>u (px)</th><th>v (px)</th><th></th></tr></thead><tbody>
+          <tr><td>P1</td><td class="mono" id="sP1u">—</td><td class="mono" id="sP1v">—</td><td><button class="btn sm" data-pick="P1">クリックで指定</button></td></tr>
+          <tr><td>P2</td><td class="mono" id="sP2u">—</td><td class="mono" id="sP2v">—</td><td><button class="btn sm" data-pick="P2">クリックで指定</button></td></tr>
+        </tbody></table>
+        <div class="field"><label for="sDist">P1–P2 の距離</label><div class="row"><input type="number" id="sDist" step="0.01" min="0" value="5.00"> m</div></div>
+      </div>
+      <div id="cPlane" hidden>
+        <p class="note">助走路の面（選手が走る縦の面）の上で、座標が分かる4点以上の X（水平・m）と Y（高さ・m）を入力し、画像をクリックします。地面は Y = 0 にします。</p>
+        <div class="btn-row"><button class="btn sm" id="cpAdd">＋ 点を追加</button><button class="btn sm" id="cpPick">クリック入力：OFF</button></div>
+        <div class="tbl-wrap"><table class="tbl" id="cpTable"></table></div>
+      </div>
+      <div class="btn-row"><button class="btn primary" id="calibCompute">較正を計算</button></div>
+      <div id="calibResult"></div>
+    </section>
+
+    <section class="tab" id="tab-track">
+      <h3>自動（姿勢推定・マーカーレス）</h3>
+      <div class="field"><label for="modelSel">モデル</label><select id="modelSel"><option value="heavy">heavy（高精度・遅い）</option><option value="full" selected>full（標準）</option><option value="lite">lite（高速）</option></select></div>
+      <div class="field"><label for="numPoses">検出人数</label><div class="row"><select id="numPoses"><option>1</option><option>2</option><option>3</option></select><button class="btn sm" id="pickTarget">選手をクリック</button></div></div>
+      <p class="note">審判や他の選手が写るときは検出人数を2以上にし、解析範囲の最初のフレームで選手の腰をクリックしてください。</p>
+      <label class="note" id="modelFileWrap" hidden>モデルファイル（.task）を選択：<input type="file" id="modelFile" accept=".task,.bin"></label>
+      <div class="btn-row"><button class="btn primary" id="runPose">姿勢を推定</button><button class="btn danger" id="cancelPose" disabled>中止</button></div>
+      <div class="progress"><div id="poseProg"></div></div>
+      <div class="note mono" id="poseStatus"></div>
+      <h3>推定結果の修正</h3>
+      <div class="btn-row">
+        <button class="btn sm" id="editMode">修正モード：OFF</button>
+        <button class="btn sm" id="swapLR1">左右入替（現フレーム）</button>
+        <button class="btn sm" id="swapLR2">左右入替（現在〜範囲終了）</button>
+      </div>
+      <p class="note">横からの映像では、左右の手足が入れ替わることがあります。踏切足（青＝左、オレンジ＝右）が正しいか、接地〜離地の前後を必ず確認してください。</p>
+      <h3>手動（腰をクリック）</h3>
+      <div class="btn-row">
+        <button class="btn sm" id="manClick">クリック入力：OFF</button>
+        <label class="note">クリック後 <input type="number" id="manStep" value="1" min="0" step="1" style="width:56px"> コマ進む</label>
+      </div>
+      <div class="btn-row"><button class="btn" id="manAuto">現フレームから自動追跡</button><button class="btn danger" id="manStop" disabled>停止</button><button class="btn sm danger" id="manDel">現フレームの点を削除</button></div>
+      <div class="kv" id="manInfo">手動の点：0</div>
+      <p class="note">腰（大転子）にテープを貼って撮影すると自動追跡が安定します。使うときは「① 動画・設定」で「腰（手動でクリック）」を選びます。</p>
+    </section>
+
+    <section class="tab" id="tab-events">
+      <h3>局面のフレーム</h3>
+      <div class="btn-row"><button class="btn" id="evAuto">候補を自動で探す</button><span class="note">姿勢推定の結果（踏切足のつま先）から探します。必ず映像で確認してください。</span></div>
+      <div id="evRows"></div>
+      <p class="note">接地＝踏切足が踏切板に着いた最初のフレーム、離地＝つま先が離れた最初のフレーム。飛翔区間の終わりは、着地の動作が始まる前で重心がはっきり見えている最後のフレームにします。</p>
+    </section>
+
+    <section class="tab" id="tab-export">
+      <h3>保存</h3>
+      <div class="btn-row"><button class="btn primary" id="exXlsx">Excel（結果＋時系列）を保存</button></div>
+      <div class="btn-row"><button class="btn" id="exCsv">時系列を CSV で保存</button><button class="btn" id="exPng">映像（速度ベクトル付き）を画像で保存</button></div>
+      <h3>プロジェクト</h3>
+      <div class="btn-row"><button class="btn" id="projSave">プロジェクトを保存（JSON）</button><label class="btn">プロジェクトを開く<input type="file" id="projLoad" accept=".json,application/json" hidden></label></div>
+      <p class="note">設定・較正・推定結果・局面を保存します（動画は含みません）。開いたあとに同じ動画を読み込むと映像も表示されます。</p>
+    </section>
+
+    <section class="tab help" id="tab-help"><h4>起動と動作環境</h4>
+<ul>
+  <li>この HTML ファイルを PC の Chrome または Edge で開きます。最初の姿勢推定のときだけインターネット接続が必要です</li>
+  <li>動画はパソコンの中だけで処理され、外部に送信されません</li>
+</ul>
+<h4>手順</h4>
+<ol>
+  <li><b>① 動画・設定</b>：横から撮った動画を読み込み、fps（スロー動画は撮影 fps）と踏切足を確認</li>
+  <li><b>解析範囲</b>：踏切の2〜3歩前から着地の前までを「開始＝現在」「終了＝現在」で設定</li>
+  <li><b>② 較正</b>：助走路の上に置いた2つの目印（P1・P2）をクリックし、距離を入力</li>
+  <li><b>③ 追跡</b>：「姿勢を推定」（マーカーなし）。踏切足の左右が入れ替わっていないか確認</li>
+  <li><b>④ 局面</b>：「候補を自動で探す」→ コマ送りで接地・離地を確認して直す</li>
+  <li><b>結果</b>：画面下に数値とグラフが出ます。⑤ で Excel に保存</li>
+</ol>
+<h4>計算方法</h4>
+<table>
+  <tr><th>項目</th><th>求め方</th></tr>
+  <tr><td>助走速度</td><td>助走区間（開始〜接地）の重心の水平位置を時間で直線回帰した傾き。1歩ごとの速度の揺れを平均します</td></tr>
+  <tr><td>踏切時の水平・鉛直速度</td><td>離地後の重心の軌跡に、重力 9.81 m/s² の放物線を当てはめ、離地の瞬間の速度を求めます（微分より安定）</td></tr>
+  <tr><td>踏切角度</td><td>離地時の重心の速度ベクトルと水平のなす角 = atan(鉛直速度 / 水平速度)</td></tr>
+  <tr><td>踏切速度</td><td>水平速度と鉛直速度の合成</td></tr>
+  <tr><td>接地時間</td><td>（離地 − 接地）のフレーム数 ÷ 撮影 fps</td></tr>
+  <tr><td>重心の位置</td><td>MediaPipe の33点と身体部分慣性係数（de Leva 1996）から計算。地面（P1）を高さ 0 とします</td></tr>
+  <tr><td>最高到達高（推定）</td><td>離地時の重心高 + 鉛直速度² ÷ (2 × 9.81)</td></tr>
+</table>
+<h4>精度のための注意</h4>
+<ul>
+  <li>カメラは踏切板の真横に固定し、振らないでください（振ると速度が正しく出ません）</li>
+  <li>目印は選手が走るラインの上に置きます。ラインから離れた位置の目印を使うと、距離の換算がずれます</li>
+  <li>接地時間は約 0.1 秒なので、30 fps では 3 コマしかありません。120〜240 fps を推奨します</li>
+  <li>放物線の当てはめには離地後 6 コマ以上の重心が必要です。飛翔区間の終わりは、着地に向けて脚を前に出す前までにします</li>
+  <li>推定された重心は実際と数 cm ずれることがあります。研究では手動のデジタイズとの比較などで確かめましょう</li>
+</ul>
+<h4>操作</h4>
+<ul>
+  <li>← / → で1コマ、Shift で10コマ、Space で再生・停止、Esc で入力モードを解除</li>
+  <li>グラフをクリックすると、その時刻の映像に移動します</li>
+</ul>
+</section>
+  </aside>
+</main>
+
+<section class="card results" id="results">
+  <div class="results-head"><h2>結果</h2><span class="kv" id="resInfo"></span></div>
+  <div id="resWarn"></div>
+  <div class="sec-title">速度（助走・踏切）</div>
+  <div class="kpis" id="kpiSpeed"></div>
+  <div class="sec-title" id="posTitle">重心の位置</div>
+  <div class="kpis" id="kpiPos"></div>
+  <div class="sec-title">踏切動作</div>
+  <div class="tbl-wrap" style="max-height:none"><table class="tbl" id="detailTable"></table></div>
+  <div class="sec-title">グラフ</div>
+  <div class="charts">
+    <div class="chart-box"><h4>重心の速度（水平・鉛直）</h4><div class="chart-wrap" id="cwV"><canvas id="chV"></canvas><div class="tip" id="tipV" hidden></div></div><div class="legend" id="lgV"></div></div>
+    <div class="chart-box"><h4>重心の高さ</h4><div class="chart-wrap" id="cwY"><canvas id="chY"></canvas><div class="tip" id="tipY" hidden></div></div><div class="legend" id="lgY"></div></div>
+    <div class="chart-box"><h4>重心の軌跡（横から見た図）</h4><div class="chart-wrap" id="cwP"><canvas id="chP"></canvas><div class="tip" id="tipP" hidden></div></div><div class="legend" id="lgP"></div></div>
+  </div>
+</section>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>/* ============================================================
+ * MotionLab core: 数値計算・キャリブレーション・運動学・力学・xlsx出力
+ * UI非依存（ブラウザ / Node どちらでも動作）
+ * ============================================================ */
+(function (root) {
+'use strict';
+
+const G = 9.81;
+const RAD = 180 / Math.PI;
+
+/* ---------------- MediaPipe ランドマーク ---------------- */
+const LM_NAMES = ['鼻','左目(内)','左目','左目(外)','右目(内)','右目','右目(外)','左耳','右耳','口(左)','口(右)',
+  '左肩','右肩','左肘','右肘','左手首','右手首','左小指','右小指','左人差指','右人差指','左親指','右親指',
+  '左股関節','右股関節','左膝','右膝','左足首','右足首','左踵','右踵','左つま先','右つま先'];
+
+// 解析で使う点（MediaPipe の index か、2点の中点）
+const POINTS = [
+  { key: 'nose', label: '鼻', idx: 0 },
+  { key: 'l_ear', label: '左耳', idx: 7 }, { key: 'r_ear', label: '右耳', idx: 8 },
+  { key: 'l_sh', label: '左肩', idx: 11 }, { key: 'r_sh', label: '右肩', idx: 12 },
+  { key: 'l_el', label: '左肘', idx: 13 }, { key: 'r_el', label: '右肘', idx: 14 },
+  { key: 'l_wr', label: '左手首', idx: 15 }, { key: 'r_wr', label: '右手首', idx: 16 },
+  { key: 'l_pinky', label: '左小指', idx: 17 }, { key: 'r_pinky', label: '右小指', idx: 18 },
+  { key: 'l_index', label: '左人差指', idx: 19 }, { key: 'r_index', label: '右人差指', idx: 20 },
+  { key: 'l_hip', label: '左股関節', idx: 23 }, { key: 'r_hip', label: '右股関節', idx: 24 },
+  { key: 'l_kn', label: '左膝', idx: 25 }, { key: 'r_kn', label: '右膝', idx: 26 },
+  { key: 'l_an', label: '左足首', idx: 27 }, { key: 'r_an', label: '右足首', idx: 28 },
+  { key: 'l_heel', label: '左踵', idx: 29 }, { key: 'r_heel', label: '右踵', idx: 30 },
+  { key: 'l_toe', label: '左つま先', idx: 31 }, { key: 'r_toe', label: '右つま先', idx: 32 },
+  { key: 'head', label: '頭部(耳中点)', mid: ['l_ear', 'r_ear'] },
+  { key: 'mid_sh', label: '肩中点', mid: ['l_sh', 'r_sh'] },
+  { key: 'mid_hip', label: '股関節中点', mid: ['l_hip', 'r_hip'] },
+  { key: 'l_hand', label: '左手(MP中点)', mid: ['l_pinky', 'l_index'] },
+  { key: 'r_hand', label: '右手(MP中点)', mid: ['r_pinky', 'r_index'] },
+];
+const POINT_BY_KEY = Object.fromEntries(POINTS.map(p => [p.key, p]));
+
+// スティックピクチャ用の線
+const STICK = [
+  ['l_sh','r_sh'],['l_hip','r_hip'],['l_sh','l_hip'],['r_sh','r_hip'],
+  ['l_sh','l_el'],['l_el','l_wr'],['l_wr','l_hand'],['r_sh','r_el'],['r_el','r_wr'],['r_wr','r_hand'],
+  ['l_hip','l_kn'],['l_kn','l_an'],['l_an','l_heel'],['l_heel','l_toe'],['l_an','l_toe'],
+  ['r_hip','r_kn'],['r_kn','r_an'],['r_an','r_heel'],['r_heel','r_toe'],['r_an','r_toe'],
+  ['mid_sh','head'],
+];
+
+// 関節角度（b を頂点とする a-b-c の内角, 180°=伸展位）
+const JOINT_ANGLES = [
+  { key: 'r_shoulder', label: '右肩関節角度(体幹-上腕)', a: 'r_hip', b: 'r_sh', c: 'r_el' },
+  { key: 'l_shoulder', label: '左肩関節角度(体幹-上腕)', a: 'l_hip', b: 'l_sh', c: 'l_el' },
+  { key: 'r_elbow', label: '右肘関節角度', a: 'r_sh', b: 'r_el', c: 'r_wr' },
+  { key: 'l_elbow', label: '左肘関節角度', a: 'l_sh', b: 'l_el', c: 'l_wr' },
+  { key: 'r_wrist', label: '右手関節角度', a: 'r_el', b: 'r_wr', c: 'r_hand' },
+  { key: 'l_wrist', label: '左手関節角度', a: 'l_el', b: 'l_wr', c: 'l_hand' },
+  { key: 'r_hipj', label: '右股関節角度(体幹-大腿)', a: 'r_sh', b: 'r_hip', c: 'r_kn' },
+  { key: 'l_hipj', label: '左股関節角度(体幹-大腿)', a: 'l_sh', b: 'l_hip', c: 'l_kn' },
+  { key: 'r_knee', label: '右膝関節角度', a: 'r_hip', b: 'r_kn', c: 'r_an' },
+  { key: 'l_knee', label: '左膝関節角度', a: 'l_hip', b: 'l_kn', c: 'l_an' },
+  { key: 'r_ankle', label: '右足関節角度(下腿-足)', a: 'r_kn', b: 'r_an', c: 'r_toe' },
+  { key: 'l_ankle', label: '左足関節角度(下腿-足)', a: 'l_kn', b: 'l_an', c: 'l_toe' },
+  { key: 'neck', label: '頸部角度(体幹-頭部)', a: 'mid_hip', b: 'mid_sh', c: 'head' },
+];
+
+// 身体部分（p:近位端, d:遠位端, type: 慣性係数の種類）
+const SEGMENTS = [
+  { key: 'head', label: '頭部', type: 'head', p: 'mid_sh', d: 'head' },
+  { key: 'trunk', label: '体幹', type: 'trunk', p: 'mid_sh', d: 'mid_hip' },
+  { key: 'r_uarm', label: '右上腕', type: 'uarm', p: 'r_sh', d: 'r_el' },
+  { key: 'r_farm', label: '右前腕', type: 'farm', p: 'r_el', d: 'r_wr' },
+  { key: 'r_handS', label: '右手', type: 'hand', p: 'r_wr', d: 'r_hand' },
+  { key: 'l_uarm', label: '左上腕', type: 'uarm', p: 'l_sh', d: 'l_el' },
+  { key: 'l_farm', label: '左前腕', type: 'farm', p: 'l_el', d: 'l_wr' },
+  { key: 'l_handS', label: '左手', type: 'hand', p: 'l_wr', d: 'l_hand' },
+  { key: 'r_thigh', label: '右大腿', type: 'thigh', p: 'r_hip', d: 'r_kn' },
+  { key: 'r_shank', label: '右下腿', type: 'shank', p: 'r_kn', d: 'r_an' },
+  { key: 'r_foot', label: '右足', type: 'foot', p: 'r_heel', d: 'r_toe' },
+  { key: 'l_thigh', label: '左大腿', type: 'thigh', p: 'l_hip', d: 'l_kn' },
+  { key: 'l_shank', label: '左下腿', type: 'shank', p: 'l_kn', d: 'l_an' },
+  { key: 'l_foot', label: '左足', type: 'foot', p: 'l_heel', d: 'l_toe' },
+];
+const SEG_BY_KEY = Object.fromEntries(SEGMENTS.map(s => [s.key, s]));
+
+// 2D 部分角度（水平右向き=0°, 反時計回り正）
+const SEG_ANGLES = [
+  { key: 'trunk', label: '体幹', p: 'mid_hip', d: 'mid_sh' },
+  { key: 'head', label: '頭部', p: 'mid_sh', d: 'head' },
+  { key: 'r_uarm', label: '右上腕', p: 'r_sh', d: 'r_el' }, { key: 'l_uarm', label: '左上腕', p: 'l_sh', d: 'l_el' },
+  { key: 'r_farm', label: '右前腕', p: 'r_el', d: 'r_wr' }, { key: 'l_farm', label: '左前腕', p: 'l_el', d: 'l_wr' },
+  { key: 'r_handS', label: '右手', p: 'r_wr', d: 'r_hand' }, { key: 'l_handS', label: '左手', p: 'l_wr', d: 'l_hand' },
+  { key: 'r_thigh', label: '右大腿', p: 'r_hip', d: 'r_kn' }, { key: 'l_thigh', label: '左大腿', p: 'l_hip', d: 'l_kn' },
+  { key: 'r_shank', label: '右下腿', p: 'r_kn', d: 'r_an' }, { key: 'l_shank', label: '左下腿', p: 'l_kn', d: 'l_an' },
+  { key: 'r_foot', label: '右足', p: 'r_heel', d: 'r_toe' }, { key: 'l_foot', label: '左足', p: 'l_heel', d: 'l_toe' },
+];
+
+// 逆動力学チェーン（遠位の自由端から近位へ）
+const CHAINS = [
+  { key: 'r_arm', label: '右上肢', segs: ['r_handS', 'r_farm', 'r_uarm'], joints: ['r_wr', 'r_el', 'r_sh'], jl: ['右手関節', '右肘関節', '右肩関節'], parent: 'trunk' },
+  { key: 'l_arm', label: '左上肢', segs: ['l_handS', 'l_farm', 'l_uarm'], joints: ['l_wr', 'l_el', 'l_sh'], jl: ['左手関節', '左肘関節', '左肩関節'], parent: 'trunk' },
+  { key: 'r_leg', label: '右下肢(遊脚期のみ有効)', segs: ['r_foot', 'r_shank', 'r_thigh'], joints: ['r_an', 'r_kn', 'r_hip'], jl: ['右足関節', '右膝関節', '右股関節'], parent: 'trunk' },
+  { key: 'l_leg', label: '左下肢(遊脚期のみ有効)', segs: ['l_foot', 'l_shank', 'l_thigh'], joints: ['l_an', 'l_kn', 'l_hip'], jl: ['左足関節', '左膝関節', '左股関節'], parent: 'trunk' },
+];
+
+/* 身体部分慣性係数
+ * de Leva P. (1996) Adjustments to Zatsiorsky-Seluyanov's segment inertia parameters. J Biomech 29(9):1223-1230.
+ * mass: 質量比, cm: 近位端(上表 p)からの重心位置比, rgS/rgT/rgL: 回転半径比(前後軸/左右軸/長軸)
+ * 体幹は MIDS-MIDH 定義（肩関節中心中点→股関節中心中点）の値。
+ * 頭部はマーカーレスで頭頂点が得られないため「肩中点→耳中点」で定義し重心=耳中点とする近似（回転半径比は概算）。 */
+const BSP_SETS = {
+  deLeva_m: {
+    label: 'de Leva (1996) 男性',
+    segs: {
+      head:  { mass: 0.0694, cm: 1.000,  rgS: 0.45,  rgT: 0.47,  rgL: 0.39 },
+      trunk: { mass: 0.4346, cm: 0.4310, rgS: 0.384, rgT: 0.358, rgL: 0.197 },
+      uarm:  { mass: 0.0271, cm: 0.5772, rgS: 0.285, rgT: 0.269, rgL: 0.158 },
+      farm:  { mass: 0.0162, cm: 0.4574, rgS: 0.276, rgT: 0.265, rgL: 0.121 },
+      hand:  { mass: 0.0061, cm: 0.7900, rgS: 0.628, rgT: 0.513, rgL: 0.401 },
+      thigh: { mass: 0.1416, cm: 0.4095, rgS: 0.329, rgT: 0.329, rgL: 0.149 },
+      shank: { mass: 0.0433, cm: 0.4395, rgS: 0.251, rgT: 0.246, rgL: 0.102 },
+      foot:  { mass: 0.0137, cm: 0.4415, rgS: 0.257, rgT: 0.245, rgL: 0.124 },
+    },
+  },
+  deLeva_f: {
+    label: 'de Leva (1996) 女性',
+    segs: {
+      head:  { mass: 0.0668, cm: 1.000,  rgS: 0.41,  rgT: 0.44,  rgL: 0.39 },
+      trunk: { mass: 0.4257, cm: 0.3782, rgS: 0.379, rgT: 0.361, rgL: 0.182 },
+      uarm:  { mass: 0.0255, cm: 0.5754, rgS: 0.278, rgT: 0.260, rgL: 0.148 },
+      farm:  { mass: 0.0138, cm: 0.4559, rgS: 0.261, rgT: 0.257, rgL: 0.094 },
+      hand:  { mass: 0.0056, cm: 0.7474, rgS: 0.531, rgT: 0.454, rgL: 0.335 },
+      thigh: { mass: 0.1478, cm: 0.3612, rgS: 0.369, rgT: 0.364, rgL: 0.162 },
+      shank: { mass: 0.0481, cm: 0.4352, rgS: 0.267, rgT: 0.263, rgL: 0.092 },
+      foot:  { mass: 0.0129, cm: 0.4014, rgS: 0.299, rgT: 0.279, rgL: 0.139 },
+    },
+  },
+};
+const SEG_TYPES = [
+  ['head', '頭部'], ['trunk', '体幹'], ['uarm', '上腕'], ['farm', '前腕'], ['hand', '手'],
+  ['thigh', '大腿'], ['shank', '下腿'], ['foot', '足'],
+];
+
+/* ---------------- 小さな線形代数 ---------------- */
+const V = {
+  sub: (a, b) => a.map((v, i) => v - b[i]),
+  add: (a, b) => a.map((v, i) => v + b[i]),
+  scale: (a, s) => a.map(v => v * s),
+  dot: (a, b) => a.reduce((s, v, i) => s + v * b[i], 0),
+  norm: a => Math.sqrt(a.reduce((s, v) => s + v * v, 0)),
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  cross2: (a, b) => a[0] * b[1] - a[1] * b[0],
+};
+
+// Householder QR による最小二乗解 (A: m×n 行配列, b: m)
+function lstsq(A, b) {
+  const m = A.length, n = A[0].length;
+  if (m < n) throw new Error('方程式の数が不足しています');
+  const R = A.map(r => Float64Array.from(r));
+  const y = Float64Array.from(b);
+  for (let k = 0; k < n; k++) {
+    let norm = 0;
+    for (let i = k; i < m; i++) norm += R[i][k] * R[i][k];
+    norm = Math.sqrt(norm);
+    if (norm === 0) continue;
+    const alpha = R[k][k] > 0 ? -norm : norm;
+    const v = new Float64Array(m);
+    for (let i = k; i < m; i++) v[i] = R[i][k];
+    v[k] -= alpha;
+    let vnorm2 = 0;
+    for (let i = k; i < m; i++) vnorm2 += v[i] * v[i];
+    if (vnorm2 === 0) continue;
+    for (let j = k; j < n; j++) {
+      let s = 0;
+      for (let i = k; i < m; i++) s += v[i] * R[i][j];
+      s = 2 * s / vnorm2;
+      for (let i = k; i < m; i++) R[i][j] -= s * v[i];
+    }
+    let s = 0;
+    for (let i = k; i < m; i++) s += v[i] * y[i];
+    s = 2 * s / vnorm2;
+    for (let i = k; i < m; i++) y[i] -= s * v[i];
+  }
+  const x = new Float64Array(n);
+  for (let k = n - 1; k >= 0; k--) {
+    let s = y[k];
+    for (let j = k + 1; j < n; j++) s -= R[k][j] * x[j];
+    if (Math.abs(R[k][k]) < 1e-14) throw new Error('解が一意に定まりません（点の配置を確認してください）');
+    x[k] = s / R[k][k];
+  }
+  return Array.from(x);
+}
+
+function matMul(A, B) {
+  const n = A.length, m = B[0].length, k = B.length;
+  const C = [];
+  for (let i = 0; i < n; i++) {
+    C.push([]);
+    for (let j = 0; j < m; j++) { let s = 0; for (let t = 0; t < k; t++) s += A[i][t] * B[t][j]; C[i].push(s); }
+  }
+  return C;
+}
+function inv3(M) {
+  const [a, b, c] = M[0], [d, e, f] = M[1], [g, h, i] = M[2];
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C;
+  if (Math.abs(det) < 1e-18) throw new Error('特異行列');
+  return [
+    [A / det, -(b * i - c * h) / det, (b * f - c * e) / det],
+    [B / det, (a * i - c * g) / det, -(a * f - c * d) / det],
+    [C / det, -(a * h - b * g) / det, (a * e - b * d) / det],
+  ];
+}
+
+// 3x3 対称行列の固有値（Jacobi法）
+function eigSym3(M) {
+  const a = M.map(r => r.slice());
+  for (let sweep = 0; sweep < 50; sweep++) {
+    let off = 0;
+    for (let p = 0; p < 3; p++) for (let q = p + 1; q < 3; q++) off += a[p][q] * a[p][q];
+    if (off < 1e-20) break;
+    for (let p = 0; p < 3; p++) for (let q = p + 1; q < 3; q++) {
+      if (Math.abs(a[p][q]) < 1e-30) continue;
+      const th = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+      const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+      const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < 3; k++) { const akp = a[k][p], akq = a[k][q]; a[k][p] = c * akp - s * akq; a[k][q] = s * akp + c * akq; }
+      for (let k = 0; k < 3; k++) { const apk = a[p][k], aqk = a[q][k]; a[p][k] = c * apk - s * aqk; a[q][k] = s * apk + c * aqk; }
+    }
+  }
+  return [a[0][0], a[1][1], a[2][2]].sort((x, y) => x - y);
+}
+// 点群の平面性（最小固有値/最大固有値）。小さいほど同一平面に近い
+function planarity(pts) {
+  const n = pts.length; const c = [0, 0, 0];
+  pts.forEach(p => { for (let i = 0; i < 3; i++) c[i] += p[i] / n; });
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  pts.forEach(p => { for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) M[i][j] += (p[i] - c[i]) * (p[j] - c[j]) / n; });
+  const e = eigSym3(M);
+  return e[2] > 0 ? e[0] / e[2] : 0;
+}
+
+// 点群の正規化行列（重心を原点、平均距離を √dim に）
+function normMatrix(pts) {
+  const d = pts[0].length, n = pts.length;
+  const c = new Array(d).fill(0);
+  pts.forEach(p => p.forEach((v, i) => c[i] += v / n));
+  let md = 0;
+  pts.forEach(p => md += Math.sqrt(p.reduce((s, v, i) => s + (v - c[i]) ** 2, 0)) / n);
+  const s = md > 0 ? Math.sqrt(d) / md : 1;
+  const T = [];
+  for (let i = 0; i <= d; i++) {
+    T.push(new Array(d + 1).fill(0));
+    if (i < d) { T[i][i] = s; T[i][d] = -s * c[i]; } else T[i][d] = 1;
+  }
+  return T;
+}
+const applyT = (T, p) => { const d = p.length; const q = []; for (let i = 0; i < d; i++) { let s = T[i][d]; for (let j = 0; j < d; j++) s += T[i][j] * p[j]; q.push(s); } return q; };
+
+/* ---------------- キャリブレーション ---------------- */
+
+// 2点スケール法
+function calibScale(p1, p2, dist, opts = {}) {
+  const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+  const px = Math.hypot(dx, dy);
+  if (!(px > 0) || !(dist > 0)) throw new Error('2点と実長を正しく入力してください');
+  const mpp = dist / px;
+  // 画像座標(y下向き) → 実座標(Y上向き)
+  let ang = 0;
+  if (opts.alignAxis) ang = Math.atan2(-dy, dx); // P1→P2 を +X 軸に
+  const origin = opts.origin || p1;
+  return { type: 'scale', mpp, ang, origin, p1, p2, dist };
+}
+function applyScale(c, u, v) {
+  const x = (u - c.origin[0]) * c.mpp, y = -(v - c.origin[1]) * c.mpp;
+  const ca = Math.cos(-c.ang), sa = Math.sin(-c.ang);
+  return [x * ca - y * sa, x * sa + y * ca];
+}
+
+// 平面射影（2D DLT / ホモグラフィ）: 画像(u,v) → 実平面(X,Y)
+function calibHomography(img, world) {
+  const n = img.length;
+  if (n < 4) throw new Error('平面射影には4点以上が必要です');
+  const Ti = normMatrix(img), Tw = normMatrix(world);
+  const A = [], b = [];
+  for (let k = 0; k < n; k++) {
+    const [u, v] = applyT(Ti, img[k]); const [X, Y] = applyT(Tw, world[k]);
+    A.push([u, v, 1, 0, 0, 0, -X * u, -X * v]); b.push(X);
+    A.push([0, 0, 0, u, v, 1, -Y * u, -Y * v]); b.push(Y);
+  }
+  const h = lstsq(A, b);
+  const Hn = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1]];
+  let H = matMul(matMul(inv3(Tw), Hn), Ti);
+  const s = H[2][2]; H = H.map(r => r.map(v => v / s));
+  const c = { type: 'homography', H };
+  c.residuals = img.map((p, k) => { const q = applyHomography(c, p[0], p[1]); return Math.hypot(q[0] - world[k][0], q[1] - world[k][1]); });
+  c.rmse = Math.sqrt(c.residuals.reduce((s, r) => s + r * r, 0) / n);
+  return c;
+}
+function applyHomography(c, u, v) {
+  const H = c.H; const w = H[2][0] * u + H[2][1] * v + H[2][2];
+  return [(H[0][0] * u + H[0][1] * v + H[0][2]) / w, (H[1][0] * u + H[1][1] * v + H[1][2]) / w];
+}
+function apply2D(c, u, v) {
+  if (!c) return [u, -v]; // 未較正: px, Y上向き
+  return c.type === 'scale' ? applyScale(c, u, v) : applyHomography(c, u, v);
+}
+
+// 3D DLT（11パラメータ）: world[k]=[X,Y,Z], img[k]=[u,v]
+function calibDLT3D(img, world) {
+  const n = img.length;
+  if (n < 6) throw new Error('3次元DLTには6点以上（同一平面上にない点）が必要です');
+  const Ti = normMatrix(img), Tw = normMatrix(world);
+  const A = [], b = [];
+  for (let k = 0; k < n; k++) {
+    const [u, v] = applyT(Ti, img[k]); const [X, Y, Z] = applyT(Tw, world[k]);
+    A.push([X, Y, Z, 1, 0, 0, 0, 0, -u * X, -u * Y, -u * Z]); b.push(u);
+    A.push([0, 0, 0, 0, X, Y, Z, 1, -v * X, -v * Y, -v * Z]); b.push(v);
+  }
+  const l = lstsq(A, b);
+  const Pn = [[l[0], l[1], l[2], l[3]], [l[4], l[5], l[6], l[7]], [l[8], l[9], l[10], 1]];
+  // P = Ti^-1 Pn Tw
+  let P = matMul(matMul(inv3(Ti), Pn), Tw);
+  const s = P[2][3]; P = P.map(r => r.map(v => v / s));
+  const L = [P[0][0], P[0][1], P[0][2], P[0][3], P[1][0], P[1][1], P[1][2], P[1][3], P[2][0], P[2][1], P[2][2]];
+  const res = img.map((p, k) => { const q = projectDLT(L, world[k]); return Math.hypot(q[0] - p[0], q[1] - p[1]); });
+  return { L, residuals: res, rmse: Math.sqrt(res.reduce((s, r) => s + r * r, 0) / n) };
+}
+function projectDLT(L, P) {
+  const [X, Y, Z] = P; const w = L[8] * X + L[9] * Y + L[10] * Z + 1;
+  return [(L[0] * X + L[1] * Y + L[2] * Z + L[3]) / w, (L[4] * X + L[5] * Y + L[6] * Z + L[7]) / w];
+}
+// 複数カメラの画像座標から3次元座標を再構成
+function reconstruct(Ls, uvs) {
+  const A = [], b = [];
+  for (let k = 0; k < Ls.length; k++) {
+    const L = Ls[k], uv = uvs[k];
+    if (!L || !uv || !isFinite(uv[0]) || !isFinite(uv[1])) continue;
+    const [u, v] = uv;
+    A.push([L[0] - u * L[8], L[1] - u * L[9], L[2] - u * L[10]]); b.push(u - L[3]);
+    A.push([L[4] - v * L[8], L[5] - v * L[9], L[6] - v * L[10]]); b.push(v - L[7]);
+  }
+  if (A.length < 4) return null;
+  return lstsq(A, b);
+}
+
+/* ---------------- 信号処理 ---------------- */
+
+// 2次 Butterworth を前後2回（4次・位相遅れなし）
+function butterLowpass(x, fs, fc) {
+  const n = x.length;
+  const out = Float64Array.from(x);
+  if (!(fc > 0) || n < 4) return out;
+  const fcAdj = fc / 0.802; // 2パス補正 (Winter)
+  if (fcAdj >= fs * 0.49) return out;
+  const K = Math.tan(Math.PI * fcAdj / fs);
+  const norm = 1 + Math.SQRT2 * K + K * K;
+  const b0 = K * K / norm, b1 = 2 * b0, b2 = b0;
+  const a1 = 2 * (K * K - 1) / norm, a2 = (1 - Math.SQRT2 * K + K * K) / norm;
+  // NaN で区切って連続区間ごとに処理
+  let i = 0;
+  while (i < n) {
+    while (i < n && !isFinite(x[i])) i++;
+    let j = i;
+    while (j < n && isFinite(x[j])) j++;
+    const len = j - i;
+    if (len >= 4) {
+      const seg = Array.from(x.slice(i, j));
+      const pad = Math.min(len - 1, Math.max(6, Math.round(3 * fs / fc)));
+      const ext = [];
+      for (let k = pad; k >= 1; k--) ext.push(2 * seg[0] - seg[k]);
+      ext.push(...seg);
+      for (let k = 1; k <= pad; k++) ext.push(2 * seg[len - 1] - seg[len - 1 - k]);
+      const pass = arr => {
+        const y = new Array(arr.length);
+        let x1 = arr[0], x2 = arr[0], y1 = arr[0], y2 = arr[0];
+        for (let k = 0; k < arr.length; k++) {
+          const yk = b0 * arr[k] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+          x2 = x1; x1 = arr[k]; y2 = y1; y1 = yk; y[k] = yk;
+        }
+        return y;
+      };
+      const f1 = pass(ext).reverse();
+      const f2 = pass(f1).reverse();
+      for (let k = 0; k < len; k++) out[i + k] = f2[pad + k];
+    }
+    i = j;
+  }
+  return out;
+}
+
+// 欠損補間（maxGap フレーム以下の欠損を線形補間）
+function fillGaps(x, maxGap) {
+  const y = Float64Array.from(x);
+  const n = y.length;
+  let i = 0;
+  while (i < n) {
+    if (isFinite(y[i])) { i++; continue; }
+    let j = i;
+    while (j < n && !isFinite(y[j])) j++;
+    const gap = j - i;
+    if (i > 0 && j < n && gap <= maxGap) {
+      const a = y[i - 1], b = y[j];
+      for (let k = i; k < j; k++) y[k] = a + (b - a) * (k - i + 1) / (gap + 1);
+    }
+    i = j;
+  }
+  return y;
+}
+
+// 数値微分（中心差分、端は片側差分）
+function deriv(x, dt) {
+  const n = x.length, d = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    const a = i > 0 ? x[i - 1] : NaN, b = i < n - 1 ? x[i + 1] : NaN, c = x[i];
+    if (isFinite(a) && isFinite(b)) d[i] = (b - a) / (2 * dt);
+    else if (isFinite(b) && isFinite(c)) d[i] = (b - c) / dt;
+    else if (isFinite(a) && isFinite(c)) d[i] = (c - a) / dt;
+  }
+  return d;
+}
+
+function unwrap(rad) {
+  const y = Float64Array.from(rad);
+  let off = 0, prev = NaN;
+  for (let i = 0; i < y.length; i++) {
+    if (!isFinite(y[i])) continue;
+    if (isFinite(prev)) {
+      let d = y[i] + off - prev;
+      while (d > Math.PI) { off -= 2 * Math.PI; d -= 2 * Math.PI; }
+      while (d < -Math.PI) { off += 2 * Math.PI; d += 2 * Math.PI; }
+    }
+    y[i] += off; prev = y[i];
+  }
+  return y;
+}
+
+// 時系列の線形補間（tSrc 昇順）
+function interpSeries(tSrc, ySrc, tDst) {
+  const out = new Float64Array(tDst.length).fill(NaN);
+  let k = 0;
+  for (let i = 0; i < tDst.length; i++) {
+    const t = tDst[i];
+    while (k < tSrc.length - 2 && tSrc[k + 1] < t) k++;
+    if (tSrc.length === 1) { if (Math.abs(tSrc[0] - t) < 1e-9) out[i] = ySrc[0]; continue; }
+    const t0 = tSrc[k], t1 = tSrc[k + 1];
+    if (t < t0 - 1e-9 || t > t1 + 1e-9) continue;
+    const a = ySrc[k], b = ySrc[k + 1];
+    const w = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
+    if (w < 1e-9) out[i] = a; else if (w > 1 - 1e-9) out[i] = b;
+    else if (isFinite(a) && isFinite(b)) out[i] = a + (b - a) * w;
+  }
+  return out;
+}
+
+/* ---------------- 解析本体 ---------------- */
+
+/*
+ * input = {
+ *   mode: '2d' | '3d',
+ *   N, dt, t: Float64Array(N), frames: Int32Array(N),
+ *   imgSeries: [ camIndex -> { lmk: Array(33) of {u:Float64Array(N), v:Float64Array(N)} } ],   // 可視度閾値で NaN 化済み
+ *   calib2d, dlt: [L1, L2], up: 'Z'|'Y'|'X',
+ *   world: (2Dのみ, 参考) Array(33) of {x,y,z: Float64Array(N)} or null,
+ *   tracks: [{name, kind, mass, cutoff, img: [{u,v}, {u,v}]}],
+ *   opts: { cutoff, maxGap, bodyMass, height, bsp: {segs}, heldMass, heldHand:'r'|'l'|'', releaseIdx },
+ * }
+ */
+function analyze(input) {
+  const { mode, N, dt, t, opts } = input;
+  const D = mode === '3d' ? 3 : 2;
+  const fs = 1 / dt;
+  const calibrated = mode === '3d' ? !!(input.dlt && input.dlt[0] && input.dlt[1]) : !!input.calib2d;
+  const unitL = calibrated ? 'm' : 'px';
+  const upAxis = D === 3 ? ({ X: 0, Y: 1, Z: 2 }[input.up || 'Z']) : 1;
+  const up = new Array(D).fill(0); up[upAxis] = 1;
+  const gvec = up.map(v => -G * v);
+  // 水平面の基底（e1×e2=up）
+  const h1 = D === 3 ? (upAxis === 2 ? 0 : upAxis === 1 ? 2 : 1) : 0;
+  const h2 = D === 3 ? (upAxis === 2 ? 1 : upAxis === 1 ? 0 : 2) : null;
+  const axisNames = D === 3 ? ['X', 'Y', 'Z'] : ['X', 'Y'];
+  const warnings = [];
+
+  // --- 1. 画像座標 → 実座標（各ランドマーク）
+  const toWorld = (imgPerCam) => {
+    // imgPerCam: [{u,v}, {u,v}?] → [Float64Array x D]
+    const out = []; for (let d = 0; d < D; d++) out.push(new Float64Array(N).fill(NaN));
+    for (let i = 0; i < N; i++) {
+      if (D === 2) {
+        const u = imgPerCam[0].u[i], v = imgPerCam[0].v[i];
+        if (!isFinite(u) || !isFinite(v)) continue;
+        const q = apply2D(input.calib2d, u, v);
+        out[0][i] = q[0]; out[1][i] = q[1];
+      } else {
+        const uvs = imgPerCam.map(c => c ? [c.u[i], c.v[i]] : null);
+        if (uvs.some(p => !p || !isFinite(p[0]) || !isFinite(p[1]))) continue;
+        const X = reconstruct(input.dlt, uvs);
+        if (X) for (let d = 0; d < 3; d++) out[d][i] = X[d];
+      }
+    }
+    return out;
+  };
+  const smooth = (raw, fc, maxGap) => raw.map(s => butterLowpass(fillGaps(s, maxGap), fs, fc));
+
+  const rawPts = {}, fPts = {};
+  for (const p of POINTS) {
+    if (p.idx === undefined) continue;
+    const imgPerCam = input.imgSeries.map(c => c ? c.lmk[p.idx] : null);
+    rawPts[p.key] = toWorld(imgPerCam);
+    fPts[p.key] = smooth(rawPts[p.key], opts.cutoff, opts.maxGap);
+  }
+  for (const p of POINTS) {
+    if (!p.mid) continue;
+    const [a, b] = p.mid;
+    rawPts[p.key] = rawPts[a].map((s, d) => s.map((v, i) => (v + rawPts[b][d][i]) / 2));
+    fPts[p.key] = fPts[a].map((s, d) => s.map((v, i) => (v + fPts[b][d][i]) / 2));
+  }
+  const P = (key, i) => { const s = fPts[key]; const r = []; for (let d = 0; d < D; d++) r.push(s[d][i]); return r; };
+  const finite = a => a.every(isFinite);
+
+  const groups = [];
+  const addGroup = (key, label, sheet, series, sub) => { const g = { key, label, sheet, series, sub }; groups.push(g); return g; };
+  const S = (key, label, unit, data, extra) => Object.assign({ key, label, unit, data }, extra || {});
+  const degS = '°/s', deg = '°';
+
+  // --- 2. 座標
+  {
+    const raw = [], filt = [];
+    for (const p of POINTS) {
+      for (let d = 0; d < D; d++) {
+        raw.push(S(`raw.${p.key}.${axisNames[d]}`, `${p.label} ${axisNames[d]}`, unitL, rawPts[p.key][d], { sub: p.label }));
+        filt.push(S(`pos.${p.key}.${axisNames[d]}`, `${p.label} ${axisNames[d]}`, unitL, fPts[p.key][d], { sub: p.label }));
+      }
+    }
+    addGroup('rawcoord', '座標(生データ)', '座標_生', raw, true);
+    addGroup('coord', '座標(平滑化)', '座標_平滑化', filt, true);
+  }
+
+  // --- 3. 関節角度・角速度
+  const angOf = (a, b, c, i) => {
+    const A = P(a, i), B = P(b, i), C = P(c, i);
+    if (!finite(A) || !finite(B) || !finite(C)) return NaN;
+    const u = V.sub(A, B), v = V.sub(C, B);
+    const nu = V.norm(u), nv = V.norm(v);
+    if (nu === 0 || nv === 0) return NaN;
+    return Math.acos(Math.max(-1, Math.min(1, V.dot(u, v) / (nu * nv)))) * RAD;
+  };
+  const jointSeries = [], jointVel = [];
+  const jointAngle = {};
+  for (const j of JOINT_ANGLES) {
+    const a = new Float64Array(N);
+    for (let i = 0; i < N; i++) a[i] = angOf(j.a, j.b, j.c, i);
+    jointAngle[j.key] = a;
+    jointSeries.push(S(`ja.${j.key}`, j.label, deg, a));
+    jointVel.push(S(`jav.${j.key}`, j.label.replace('角度', '角速度'), degS, deriv(a, dt)));
+  }
+  addGroup('joint', '関節角度', '関節角度', jointSeries);
+  addGroup('jointvel', '関節角速度', '関節角速度', jointVel);
+
+  // --- 4. 部分角度・部分角速度
+  const segAng = [], segVel = [];
+  const segOmega = {}; // 2D: rad/s scalar, 3D: [wx,wy,wz]
+  for (const s of SEG_ANGLES) {
+    if (D === 2) {
+      const th = new Float64Array(N);
+      for (let i = 0; i < N; i++) { const p = P(s.p, i), d = P(s.d, i); th[i] = finite(p) && finite(d) ? Math.atan2(d[1] - p[1], d[0] - p[0]) : NaN; }
+      const tu = unwrap(th);
+      const w = deriv(tu, dt);
+      segOmega[s.key] = w;
+      segAng.push(S(`sa.${s.key}`, `${s.label}角度`, deg, tu.map(v => v * RAD)));
+      segVel.push(S(`sav.${s.key}`, `${s.label}角速度`, degS, w.map(v => v * RAD)));
+    } else {
+      // 長軸単位ベクトル u, ω⊥ = u × du/dt
+      const U = [0, 1, 2].map(() => new Float64Array(N).fill(NaN));
+      const incl = new Float64Array(N).fill(NaN);
+      for (let i = 0; i < N; i++) {
+        const p = P(s.p, i), d = P(s.d, i);
+        if (!finite(p) || !finite(d)) continue;
+        const v = V.sub(d, p), n = V.norm(v); if (n === 0) continue;
+        for (let k = 0; k < 3; k++) U[k][i] = v[k] / n;
+        incl[i] = Math.acos(Math.max(-1, Math.min(1, V.dot(v, up) / n))) * RAD;
+      }
+      const dU = U.map(x => deriv(x, dt));
+      const W = [0, 1, 2].map(() => new Float64Array(N).fill(NaN));
+      const Wm = new Float64Array(N).fill(NaN);
+      for (let i = 0; i < N; i++) {
+        const u = [U[0][i], U[1][i], U[2][i]], du = [dU[0][i], dU[1][i], dU[2][i]];
+        if (!finite(u) || !finite(du)) continue;
+        const w = V.cross(u, du);
+        for (let k = 0; k < 3; k++) W[k][i] = w[k];
+        Wm[i] = V.norm(w);
+      }
+      segOmega[s.key] = W;
+      segAng.push(S(`sa.${s.key}`, `${s.label}の鉛直からの傾き`, deg, incl));
+      segVel.push(S(`sav.${s.key}`, `${s.label}角速度(大きさ)`, degS, Wm.map(v => v * RAD)));
+      for (let k = 0; k < 3; k++) segVel.push(S(`sav.${s.key}.${axisNames[k]}`, `${s.label}角速度 ω${axisNames[k]}`, degS, W[k].map(v => v * RAD)));
+    }
+  }
+  // 体幹前傾角
+  {
+    const tr = new Float64Array(N).fill(NaN);
+    for (let i = 0; i < N; i++) {
+      const a = P('mid_hip', i), b = P('mid_sh', i);
+      if (!finite(a) || !finite(b)) continue;
+      const v = V.sub(b, a);
+      if (D === 2) tr[i] = Math.atan2(v[0], v[1]) * RAD;
+      else tr[i] = Math.acos(Math.max(-1, Math.min(1, V.dot(v, up) / V.norm(v)))) * RAD;
+    }
+    segAng.unshift(S('sa.trunk_incl', D === 2 ? '体幹傾斜角(鉛直から, +X方向へ正)' : '体幹傾斜角(鉛直から)', deg, tr));
+  }
+  addGroup('segang', D === 2 ? '部分角度' : '部分の傾き', '部分角度', segAng);
+  addGroup('segvel', '部分角速度', '部分角速度', segVel);
+
+  // --- 5. 体幹の捻転
+  const twistFrom = (getP, upv, e1, e2, label, unitNote) => {
+    // getP(key,i) -> [x,y,z]
+    const pel = new Float64Array(N).fill(NaN), sho = new Float64Array(N).fill(NaN), tw = new Float64Array(N).fill(NaN), twH = new Float64Array(N).fill(NaN);
+    for (let i = 0; i < N; i++) {
+      const lh = getP('l_hip', i), rh = getP('r_hip', i), ls = getP('l_sh', i), rs = getP('r_sh', i);
+      if (![lh, rh, ls, rs].every(finite)) continue;
+      const p = V.sub(rh, lh), s = V.sub(rs, ls);
+      const ang = v => Math.atan2(V.dot(v, e2), V.dot(v, e1));
+      pel[i] = ang(p); sho[i] = ang(s);
+      // 体幹長軸に垂直な面での角度差
+      const mh = V.scale(V.add(lh, rh), 0.5), ms = V.scale(V.add(ls, rs), 0.5);
+      let ax = V.sub(ms, mh); const na = V.norm(ax); if (na === 0) continue; ax = V.scale(ax, 1 / na);
+      const pp = V.sub(p, V.scale(ax, V.dot(p, ax))), sp = V.sub(s, V.scale(ax, V.dot(s, ax)));
+      tw[i] = Math.atan2(V.dot(V.cross(pp, sp), ax), V.dot(pp, sp));
+    }
+    const pu = unwrap(pel), su = unwrap(sho);
+    for (let i = 0; i < N; i++) { const d = su[i] - pu[i]; twH[i] = Math.atan2(Math.sin(d), Math.cos(d)); }
+    const twu = unwrap(tw), twHu = unwrap(twH);
+    const series = [
+      S('tw.pelvis', `骨盤回旋角(水平面)${label}`, deg, pu.map(v => v * RAD)),
+      S('tw.shoulder', `肩(上胴)回旋角(水平面)${label}`, deg, su.map(v => v * RAD)),
+      S('tw.twist', `体幹捻転角(体幹長軸垂直面: 肩-骨盤)${label}`, deg, twu.map(v => v * RAD)),
+      S('tw.twistH', `体幹捻転角(水平面投影: 肩-骨盤)${label}`, deg, twHu.map(v => v * RAD)),
+    ];
+    const vel = series.map(s => S(s.key + '.vel', s.label.replace(/角\(/, '角速度(').replace('角(', '角速度('), degS, deriv(s.data, dt)));
+    return { series: series.concat(vel), note: unitNote };
+  };
+  if (D === 3) {
+    const e1 = [0, 0, 0], e2 = [0, 0, 0]; e1[h1] = 1; e2[h2] = 1;
+    const tw = twistFrom(P, up, e1, e2, '', '');
+    addGroup('twist', '体幹の捻転', '体幹捻転', tw.series);
+  }
+
+  // --- 6. 部位の変位・速度・加速度（全点 + 身体重心 + トラッキング点）
+  const kinOfPoint = (label, keyBase, pos, unitL_) => {
+    const res = [];
+    const vel = pos.map(s => deriv(s, dt));
+    const acc = vel.map(s => deriv(s, dt));
+    // 変位（解析開始時点の位置から）
+    let i0 = 0; while (i0 < N && !pos.every(s => isFinite(s[i0]))) i0++;
+    const disp = pos.map(s => s.map(v => i0 < N ? v - s[i0] : NaN));
+    const dmag = new Float64Array(N).fill(NaN), path = new Float64Array(N).fill(NaN), vmag = new Float64Array(N).fill(NaN), amag = new Float64Array(N).fill(NaN);
+    let cum = 0, prev = null;
+    for (let i = 0; i < N; i++) {
+      const p = pos.map(s => s[i]);
+      if (finite(p)) {
+        dmag[i] = Math.sqrt(disp.reduce((s, d) => s + d[i] * d[i], 0));
+        if (prev) cum += V.norm(V.sub(p, prev));
+        prev = p; path[i] = cum;
+      }
+      const v = vel.map(s => s[i]); if (finite(v)) vmag[i] = V.norm(v);
+      const a = acc.map(s => s[i]); if (finite(a)) amag[i] = V.norm(a);
+    }
+    for (let d = 0; d < D; d++) res.push(S(`${keyBase}.p${axisNames[d]}`, `${label} 位置${axisNames[d]}`, unitL_, pos[d], { sub: label }));
+    for (let d = 0; d < D; d++) res.push(S(`${keyBase}.d${axisNames[d]}`, `${label} 変位${axisNames[d]}`, unitL_, disp[d], { sub: label }));
+    res.push(S(`${keyBase}.d`, `${label} 変位(合成)`, unitL_, dmag, { sub: label }));
+    res.push(S(`${keyBase}.path`, `${label} 累積移動距離`, unitL_, path, { sub: label }));
+    for (let d = 0; d < D; d++) res.push(S(`${keyBase}.v${axisNames[d]}`, `${label} 速度${axisNames[d]}`, unitL_ + '/s', vel[d], { sub: label }));
+    res.push(S(`${keyBase}.v`, `${label} 速度(合成)`, unitL_ + '/s', vmag, { sub: label }));
+    for (let d = 0; d < D; d++) res.push(S(`${keyBase}.a${axisNames[d]}`, `${label} 加速度${axisNames[d]}`, unitL_ + '/s²', acc[d], { sub: label }));
+    res.push(S(`${keyBase}.a`, `${label} 加速度(合成)`, unitL_ + '/s²', amag, { sub: label }));
+    return { series: res, vel, acc, vmag };
+  };
+  const pointKin = [];
+  for (const p of POINTS) pointKin.push(...kinOfPoint(p.label, `k.${p.key}`, fPts[p.key], unitL).series);
+
+  // --- 7. 身体部分の慣性・重心
+  const bodyMass = opts.bodyMass || 0;
+  const bsp = opts.bsp;
+  const segInfo = {};
+  let comPos = null;
+  if (bsp) {
+    for (const s of SEGMENTS) {
+      const c = bsp[s.type];
+      const cm = [], len = new Float64Array(N).fill(NaN);
+      for (let d = 0; d < D; d++) cm.push(new Float64Array(N).fill(NaN));
+      for (let i = 0; i < N; i++) {
+        const p = P(s.p, i), d = P(s.d, i);
+        if (!finite(p) || !finite(d)) continue;
+        for (let k = 0; k < D; k++) cm[k][i] = p[k] + c.cm * (d[k] - p[k]);
+        len[i] = V.norm(V.sub(d, p));
+      }
+      const lens = Array.from(len).filter(isFinite).sort((a, b) => a - b);
+      const L = lens.length ? lens[Math.floor(lens.length / 2)] : NaN;
+      const m = c.mass * bodyMass;
+      segInfo[s.key] = { m, L, cm, c, len,
+        IT: m * (c.rgT * L) ** 2, IS: m * (c.rgS * L) ** 2, IL: m * (c.rgL * L) ** 2,
+        I2: m * (c.rgT * L) ** 2, I3: m * (((c.rgS + c.rgT) / 2) * L) ** 2 };
+    }
+    // 身体重心
+    comPos = []; for (let d = 0; d < D; d++) comPos.push(new Float64Array(N).fill(NaN));
+    const msum = SEGMENTS.reduce((s, g) => s + bsp[g.type].mass, 0);
+    for (let i = 0; i < N; i++) {
+      const acc = new Array(D).fill(0); let ok = true;
+      for (const s of SEGMENTS) {
+        const si = segInfo[s.key]; const r = si.cm.map(a => a[i]);
+        if (!finite(r)) { ok = false; break; }
+        for (let k = 0; k < D; k++) acc[k] += bsp[s.type].mass * r[k];
+      }
+      if (ok) for (let k = 0; k < D; k++) comPos[k][i] = acc[k] / msum;
+    }
+    pointKin.push(...kinOfPoint('身体重心', 'k.com', comPos, unitL).series);
+  }
+  addGroup('pointkin', '部位の変位・速度・加速度', '部位_運動学', pointKin, true);
+
+  // --- 8. ボール・トラッキング点
+  const trackResults = [];
+  if (input.tracks && input.tracks.length) {
+    const tser = [];
+    for (const tr of input.tracks) {
+      const raw = toWorld(tr.img);
+      const pos = raw.map(s => butterLowpass(fillGaps(s, opts.maxGap), fs, tr.cutoff || 0));
+      const kin = kinOfPoint(tr.name, `trk.${tr.id}`, pos, unitL);
+      for (let d = 0; d < D; d++) tser.push(S(`trkraw.${tr.id}.${axisNames[d]}`, `${tr.name} 生座標${axisNames[d]}`, unitL, raw[d], { sub: tr.name }));
+      tser.push(...kin.series);
+      if (unitL === 'm') tser.push(S(`trk.${tr.id}.kmh`, `${tr.name} 速さ(km/h)`, 'km/h', kin.vmag.map(v => v * 3.6), { sub: tr.name }));
+      if (tr.mass > 0 && unitL === 'm') {
+        tser.push(S(`trk.${tr.id}.mom`, `${tr.name} 運動量`, 'kg·m/s', kin.vmag.map(v => v * tr.mass), { sub: tr.name }));
+        tser.push(S(`trk.${tr.id}.ke`, `${tr.name} 運動エネルギー`, 'J', kin.vmag.map(v => 0.5 * tr.mass * v * v), { sub: tr.name }));
+      }
+      trackResults.push({ id: tr.id, name: tr.name, kind: tr.kind, raw, pos, vel: kin.vel, vmag: kin.vmag, mass: tr.mass });
+    }
+    addGroup('track', 'ボール・トラッキング点', 'ボール_追跡点', tser, true);
+  }
+
+  // --- 9. 力学
+  const kinetics = { ok: false };
+  if (bsp && bodyMass > 0 && unitL === 'm') {
+    kinetics.ok = true;
+    const M = bodyMass;
+    const comVel = comPos.map(s => deriv(s, dt));
+    const comAcc = comVel.map(s => deriv(s, dt));
+    const kin = [];
+    // 外力（=地面反力推定, 地面以外に接触がない場合）
+    const F = [], Fm = new Float64Array(N).fill(NaN);
+    for (let d = 0; d < D; d++) F.push(comAcc[d].map(a => M * (a - gvec[d])));
+    for (let i = 0; i < N; i++) { const f = F.map(s => s[i]); if (finite(f)) Fm[i] = V.norm(f); }
+    for (let d = 0; d < D; d++) kin.push(S(`kin.F${axisNames[d]}`, `推定外力(地面反力) F${axisNames[d]}`, 'N', F[d]));
+    kin.push(S('kin.F', '推定外力(地面反力) 合成', 'N', Fm));
+    kin.push(S('kin.Fbw', '推定外力 合成(体重比)', 'BW', Fm.map(v => v / (M * G))));
+    kin.push(S('kin.Fup', '推定外力 鉛直成分(体重比)', 'BW', F[upAxis].map(v => v / (M * G))));
+    // 運動量
+    for (let d = 0; d < D; d++) kin.push(S(`kin.p${axisNames[d]}`, `身体の並進運動量 ${axisNames[d]}`, 'kg·m/s', comVel[d].map(v => v * M)));
+
+    // 各部分の速度・角速度・エネルギー・角運動量
+    const segKin = {};
+    const KEt = new Float64Array(N).fill(0), KEr = new Float64Array(N).fill(0), PE = new Float64Array(N).fill(0);
+    const Hs = D === 2 ? [new Float64Array(N).fill(0)] : [0, 1, 2].map(() => new Float64Array(N).fill(0));
+    const segE = [];
+    // 体幹の3次元角速度（体幹座標系から）
+    let trunkW3 = null;
+    if (D === 3) {
+      const R = []; // 各フレームの回転行列（列=体幹軸）
+      for (let i = 0; i < N; i++) {
+        const lh = P('l_hip', i), rh = P('r_hip', i), ls = P('l_sh', i), rs = P('r_sh', i);
+        if (![lh, rh, ls, rs].every(finite)) { R.push(null); continue; }
+        let z = V.sub(V.scale(V.add(ls, rs), 0.5), V.scale(V.add(lh, rh), 0.5)); z = V.scale(z, 1 / V.norm(z));
+        let x = V.add(V.sub(rs, ls), V.sub(rh, lh)); x = V.sub(x, V.scale(z, V.dot(x, z))); x = V.scale(x, 1 / V.norm(x));
+        const y = V.cross(z, x);
+        R.push([x, y, z]);
+      }
+      trunkW3 = [0, 1, 2].map(() => new Float64Array(N).fill(NaN));
+      for (let i = 0; i < N; i++) {
+        const a = R[i - 1] || null, b = R[i + 1] || null, c = R[i];
+        let r0 = a, r1 = b, h = 2 * dt;
+        if (!a || !b) { if (b && c) { r0 = c; r1 = b; h = dt; } else if (a && c) { r0 = a; r1 = c; h = dt; } else continue; }
+        // Ω = Ṙ Rᵀ, R = [x y z] 列ベクトル
+        const Rd = [0, 1, 2].map(k => V.scale(V.sub(r1[k], r0[k]), 1 / h)); // 各軸の時間微分
+        const Rc = c || r0;
+        // ω = 1/2 Σ_k (axis_k × d(axis_k)/dt)
+        let w = [0, 0, 0];
+        for (let k = 0; k < 3; k++) w = V.add(w, V.cross(Rc[k], Rd[k]));
+        w = V.scale(w, 0.5);
+        for (let k = 0; k < 3; k++) trunkW3[k][i] = w[k];
+      }
+      segKin.trunkR = R;
+    }
+    for (const s of SEGMENTS) {
+      const si = segInfo[s.key];
+      const v = si.cm.map(c => deriv(c, dt));
+      const a = v.map(c => deriv(c, dt));
+      const E = new Float64Array(N).fill(NaN);
+      let w, Hloc;
+      if (D === 2) {
+        const th = new Float64Array(N);
+        for (let i = 0; i < N; i++) { const p = P(s.p, i), d = P(s.d, i); th[i] = finite(p) && finite(d) ? Math.atan2(d[1] - p[1], d[0] - p[0]) : NaN; }
+        w = deriv(unwrap(th), dt);
+        Hloc = [w.map(x => x * si.I2)];
+      } else {
+        if (s.key === 'trunk' && trunkW3) {
+          w = trunkW3;
+          Hloc = [0, 1, 2].map(() => new Float64Array(N).fill(NaN));
+          const R = segKin.trunkR;
+          // 体幹座標: x=左右, y=前後, z=長軸 → I = diag(IT, IS, IL)
+          for (let i = 0; i < N; i++) {
+            if (!R[i]) continue;
+            const wi = [w[0][i], w[1][i], w[2][i]]; if (!finite(wi)) continue;
+            const Ib = [si.IT, si.IS, si.IL];
+            let h = [0, 0, 0];
+            for (let k = 0; k < 3; k++) h = V.add(h, V.scale(R[i][k], Ib[k] * V.dot(R[i][k], wi)));
+            for (let k = 0; k < 3; k++) Hloc[k][i] = h[k];
+          }
+        } else {
+          const segW = segOmega[s.key] || (() => {
+            const U = [0, 1, 2].map(() => new Float64Array(N).fill(NaN));
+            for (let i = 0; i < N; i++) { const p = P(s.p, i), d = P(s.d, i); if (!finite(p) || !finite(d)) continue; const vv = V.sub(d, p), n = V.norm(vv); for (let k = 0; k < 3; k++) U[k][i] = vv[k] / n; }
+            const dU = U.map(x => deriv(x, dt));
+            const W = [0, 1, 2].map(() => new Float64Array(N).fill(NaN));
+            for (let i = 0; i < N; i++) { const u = [U[0][i], U[1][i], U[2][i]], du = [dU[0][i], dU[1][i], dU[2][i]]; if (!finite(u) || !finite(du)) continue; const c = V.cross(u, du); for (let k = 0; k < 3; k++) W[k][i] = c[k]; }
+            return W;
+          })();
+          w = segW;
+          Hloc = w.map(c => c.map(x => x * si.I3));
+        }
+      }
+      for (let i = 0; i < N; i++) {
+        const vi = v.map(c => c[i]); const ci = si.cm.map(c => c[i]);
+        if (!finite(vi) || !finite(ci)) { KEt[i] = NaN; KEr[i] = NaN; PE[i] = NaN; Hs.forEach(h => h[i] = NaN); continue; }
+        const ket = 0.5 * si.m * V.dot(vi, vi);
+        let ker;
+        if (D === 2) ker = 0.5 * si.I2 * w[i] * w[i];
+        else { const wi = w.map(c => c[i]), hi = Hloc.map(c => c[i]); ker = finite(wi) && finite(hi) ? 0.5 * V.dot(wi, hi) : NaN; }
+        const pe = si.m * G * ci[upAxis];
+        KEt[i] += ket; KEr[i] += ker; PE[i] += pe;
+        E[i] = ket + ker + pe;
+        // 身体重心まわりの角運動量
+        const rc = comPos.map(c => c[i]), vc = comVel.map(c => c[i]);
+        if (finite(rc) && finite(vc)) {
+          const r = V.sub(ci, rc), vr = V.sub(vi, vc);
+          if (D === 2) Hs[0][i] += si.m * V.cross2(r, vr) + Hloc[0][i];
+          else { const h = V.add(V.scale(V.cross(r, vr), si.m), Hloc.map(c => c[i])); for (let k = 0; k < 3; k++) Hs[k][i] += h[k]; }
+        } else Hs.forEach(h => h[i] = NaN);
+      }
+      segKin[s.key] = { v, a, w, Hloc, E };
+      segE.push(S(`segE.${s.key}`, `${s.label} 力学的エネルギー`, 'J', E));
+    }
+    const Etot = KEt.map((v, i) => v + KEr[i] + PE[i]);
+    kin.push(S('kin.KEt', '並進運動エネルギー(全身)', 'J', KEt));
+    kin.push(S('kin.KEr', '回転運動エネルギー(全身)', 'J', KEr));
+    kin.push(S('kin.PE', '位置エネルギー(全身)', 'J', PE));
+    kin.push(S('kin.E', '力学的エネルギー(全身)', 'J', Etot));
+    kin.push(S('kin.Pw', '力学的エネルギーの時間変化率', 'W', deriv(Etot, dt)));
+    if (D === 2) kin.push(S('kin.H', '身体重心まわりの角運動量', 'kg·m²/s', Hs[0]));
+    else for (let k = 0; k < 3; k++) kin.push(S(`kin.H${axisNames[k]}`, `身体重心まわりの角運動量 ${axisNames[k]}`, 'kg·m²/s', Hs[k]));
+    if (input.tracks) for (const tr of trackResults) if (tr.mass > 0) {
+      // ボールの運動量は「ボール」シートに出力
+    }
+    addGroup('kinetics', '身体重心・エネルギー・運動量', '力学_全身', kin);
+    addGroup('segenergy', '部分の力学的エネルギー', '力学_部分エネルギー', segE);
+
+    // --- 逆動力学（自由端から）
+    const idSeries = [];
+    for (const ch of CHAINS) {
+      let Fd = null, Md = null; // 遠位側から受ける力（この部分に作用）
+      for (let k = 0; k < ch.segs.length; k++) {
+        const sk = ch.segs[k], si = segInfo[sk], kk = segKin[sk];
+        const jp = ch.joints[k];
+        // 付加質量（保持物体）
+        const handSide = sk === 'r_handS' ? 'r' : sk === 'l_handS' ? 'l' : '';
+        const Fp = []; for (let d = 0; d < D; d++) Fp.push(new Float64Array(N).fill(NaN));
+        const Mp = D === 2 ? [new Float64Array(N).fill(NaN)] : [0, 1, 2].map(() => new Float64Array(N).fill(NaN));
+        // dH/dt
+        const dH = kk.Hloc.map(c => deriv(c, dt));
+        for (let i = 0; i < N; i++) {
+          let m = si.m;
+          if (handSide && opts.heldHand === handSide && opts.heldMass > 0 && (opts.releaseIdx == null || i < opts.releaseIdx)) m += opts.heldMass;
+          const a = kk.a.map(c => c[i]), C = si.cm.map(c => c[i]), Pj = P(jp, i);
+          if (!finite(a) || !finite(C) || !finite(Pj)) continue;
+          const fd = Fd ? Fd.map(c => -c[i]) : new Array(D).fill(0);
+          const md = Md ? Md.map(c => -c[i]) : new Array(D === 2 ? 1 : 3).fill(0);
+          if (!finite(fd) || !finite(md)) continue;
+          const fp = a.map((ai, d) => m * (ai - gvec[d]) - fd[d]);
+          const Dp = k > 0 ? P(ch.joints[k - 1], i) : null; // 遠位関節位置
+          const rp = V.sub(Pj, C);
+          const dh = dH.map(c => c[i]); if (!finite(dh)) continue;
+          if (D === 2) {
+            let mp = dh[0] - md[0] - V.cross2(rp, fp);
+            if (Dp) { const rd = V.sub(Dp, C); mp -= V.cross2(rd, fd); }
+            Mp[0][i] = mp;
+          } else {
+            let mp = V.sub(V.sub(dh, md), V.cross(rp, fp));
+            if (Dp) { const rd = V.sub(Dp, C); mp = V.sub(mp, V.cross(rd, fd)); }
+            for (let q = 0; q < 3; q++) Mp[q][i] = mp[q];
+          }
+          for (let d = 0; d < D; d++) Fp[d][i] = fp[d];
+        }
+        // この部分の近位関節で受ける力・モーメント → 次の（近位）部分へは反作用
+        Fd = Fp; Md = Mp;
+        const jl = ch.jl[k];
+        const Fm = new Float64Array(N).fill(NaN);
+        for (let i = 0; i < N; i++) { const f = Fp.map(c => c[i]); if (finite(f)) Fm[i] = V.norm(f); }
+        for (let d = 0; d < D; d++) idSeries.push(S(`id.${ch.key}.${k}.F${axisNames[d]}`, `${jl} 関節力 F${axisNames[d]}`, 'N', Fp[d], { sub: ch.label }));
+        idSeries.push(S(`id.${ch.key}.${k}.F`, `${jl} 関節力(合成)`, 'N', Fm, { sub: ch.label }));
+        // 関節パワー: M·(ω_distal - ω_proximal)
+        const parentKey = k < ch.segs.length - 1 ? ch.segs[k + 1] : ch.parent;
+        const wD = segKin[sk].w, wP = segKin[parentKey].w;
+        const pow = new Float64Array(N).fill(NaN);
+        if (D === 2) {
+          idSeries.push(S(`id.${ch.key}.${k}.M`, `${jl} 関節トルク(反時計回り正)`, 'N·m', Mp[0], { sub: ch.label }));
+          for (let i = 0; i < N; i++) pow[i] = Mp[0][i] * (wD[i] - wP[i]);
+        } else {
+          const Mm = new Float64Array(N).fill(NaN);
+          for (let i = 0; i < N; i++) {
+            const mm = Mp.map(c => c[i]); if (!finite(mm)) continue; Mm[i] = V.norm(mm);
+            const wd = wD.map(c => c[i]), wp = wP.map(c => c[i]);
+            if (finite(wd) && finite(wp)) pow[i] = V.dot(mm, V.sub(wd, wp));
+          }
+          for (let q = 0; q < 3; q++) idSeries.push(S(`id.${ch.key}.${k}.M${axisNames[q]}`, `${jl} 関節トルク M${axisNames[q]}`, 'N·m', Mp[q], { sub: ch.label }));
+          idSeries.push(S(`id.${ch.key}.${k}.M`, `${jl} 関節トルク(大きさ)`, 'N·m', Mm, { sub: ch.label }));
+        }
+        idSeries.push(S(`id.${ch.key}.${k}.P`, `${jl} 関節パワー`, 'W', pow, { sub: ch.label }));
+      }
+    }
+    addGroup('invdyn', '関節力・関節トルク・関節パワー', '関節トルク', idSeries, true);
+    kinetics.segInfo = segInfo;
+  } else {
+    if (!(bodyMass > 0)) warnings.push('体重が未入力のため力学量は算出していません。');
+    if (unitL !== 'm') warnings.push('キャリブレーションが未設定のため、長さの単位は px です（力学量は算出していません）。');
+  }
+
+  // --- 10. 単眼推定3D（参考：2D モード）
+  if (D === 2 && input.world) {
+    const W = input.world; // 33 x {x,y,z}: X右, Y上, Z手前（メートル, 股関節中点原点）
+    const wp = {};
+    for (const p of POINTS) {
+      if (p.idx !== undefined) wp[p.key] = [W[p.idx].x, W[p.idx].y, W[p.idx].z].map(s => butterLowpass(fillGaps(s, opts.maxGap), fs, opts.cutoff));
+    }
+    for (const p of POINTS) if (p.mid) wp[p.key] = wp[p.mid[0]].map((s, d) => s.map((v, i) => (v + wp[p.mid[1]][d][i]) / 2));
+    const getW = (key, i) => [wp[key][0][i], wp[key][1][i], wp[key][2][i]];
+    const ref = [];
+    for (const j of JOINT_ANGLES) {
+      const a = new Float64Array(N);
+      for (let i = 0; i < N; i++) {
+        const A = getW(j.a, i), B = getW(j.b, i), C = getW(j.c, i);
+        if (![A, B, C].every(finite)) { a[i] = NaN; continue; }
+        const u = V.sub(A, B), v = V.sub(C, B);
+        a[i] = Math.acos(Math.max(-1, Math.min(1, V.dot(u, v) / (V.norm(u) * V.norm(v))))) * RAD;
+      }
+      ref.push(S(`mono.ja.${j.key}`, `${j.label}【単眼3D参考】`, deg, a));
+    }
+    const tw = twistFrom(getW, [0, 1, 0], [0, 0, 1], [1, 0, 0], '【単眼3D参考】', '');
+    ref.push(...tw.series.map(s => Object.assign({}, s, { key: 'mono.' + s.key })));
+    addGroup('mono3d', '単眼推定3D（参考値）', '単眼3D_参考', ref);
+  }
+
+  return { N, dt, t: input.t, frames: input.frames, D, unitL, axisNames, upAxis, up, groups, fPts, rawPts, comPos, trackResults, kinetics, warnings, h1, h2 };
+}
+
+/* ボール初速（区間回帰）: 重力加速度を既知として各成分を p(t) = p0 + v0 t + ½ g t² で当てはめ */
+function ballInitialVelocity(res, trackId, i0, i1, useRaw) {
+  const tr = res.trackResults.find(t => t.id === trackId);
+  if (!tr) throw new Error('トラッキング点が見つかりません');
+  const D = res.D; const src = useRaw ? tr.raw : tr.pos;
+  const gvec = res.up.map(v => res.unitL === 'm' ? -G * v : 0);
+  const ts = [], ps = [];
+  for (let i = Math.max(0, i0); i <= Math.min(res.N - 1, i1); i++) {
+    const p = src.map(s => s[i]);
+    if (p.every(isFinite)) { ts.push((i - i0) * res.dt); ps.push(p); }
+  }
+  if (ts.length < 3) throw new Error('区間内の有効なフレームが3点未満です');
+  const v0 = [], p0 = [], rms = [];
+  for (let d = 0; d < D; d++) {
+    const A = ts.map(t => [1, t]);
+    const b = ps.map((p, k) => p[d] - 0.5 * gvec[d] * ts[k] * ts[k]);
+    const [c0, c1] = lstsq(A, b);
+    p0.push(c0); v0.push(c1);
+    let e = 0; ps.forEach((p, k) => { const f = c0 + c1 * ts[k] + 0.5 * gvec[d] * ts[k] ** 2; e += (p[d] - f) ** 2; });
+    rms.push(Math.sqrt(e / ps.length));
+  }
+  const speed = V.norm(v0);
+  const vUp = V.dot(v0, res.up);
+  const vH = Math.sqrt(Math.max(0, speed * speed - vUp * vUp));
+  const elev = Math.atan2(vUp, vH) * RAD;
+  let azim = null;
+  if (D === 3) { const e1 = [0, 0, 0], e2 = [0, 0, 0]; e1[res.h1] = 1; e2[res.h2] = 1; azim = Math.atan2(V.dot(v0, e2), V.dot(v0, e1)) * RAD; }
+  else azim = Math.atan2(v0[1], v0[0]) * RAD;
+  // 区間平均速度（始点→終点の変位/時間）
+  const avg = V.norm(V.sub(ps[ps.length - 1], ps[0])) / (ts[ts.length - 1] - ts[0]);
+  return { v0, p0, speed, kmh: speed * 3.6, elev, azim, rms, n: ts.length, avg, t0: res.t[i0] };
+}
+
+/* 統計（グラフのサマリ用） */
+function stats(data, t) {
+  let mx = -Infinity, mn = Infinity, imx = -1, imn = -1, sum = 0, n = 0;
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i]; if (!isFinite(v)) continue;
+    if (v > mx) { mx = v; imx = i; } if (v < mn) { mn = v; imn = i; }
+    sum += v; n++;
+  }
+  return n ? { max: mx, tmax: t[imx], imax: imx, min: mn, tmin: t[imn], imin: imn, mean: sum / n, n } : null;
+}
+
+/* ---------------- xlsx 出力（依存ライブラリなし） ---------------- */
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(buf) { let c = 0xFFFFFFFF; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+async function deflateRaw(data) {
+  if (typeof CompressionStream === 'undefined') return null;
+  try {
+    const cs = new CompressionStream('deflate-raw');
+    const blob = new Blob([data]);
+    const stream = blob.stream().pipeThrough(cs);
+    const ab = await new Response(stream).arrayBuffer();
+    return new Uint8Array(ab);
+  } catch (e) { return null; }
+}
+
+async function zip(files) { // files: [{name, data: Uint8Array}]
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  for (const f of files) {
+    const nameB = enc.encode(f.name);
+    const crc = crc32(f.data);
+    let comp = await deflateRaw(f.data); let method = 8;
+    if (!comp || comp.length >= f.data.length) { comp = f.data; method = 0; }
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, method, true);
+    lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, comp.length, true); lh.setUint32(22, f.data.length, true); lh.setUint16(26, nameB.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), nameB, comp);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, method, true);
+    ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, crc, true); ch.setUint32(20, comp.length, true); ch.setUint32(24, f.data.length, true);
+    ch.setUint16(28, nameB.length, true); ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), nameB);
+    offset += 30 + nameB.length + comp.length;
+  }
+  const csize = central.reduce((s, b) => s + b.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, csize, true); end.setUint32(16, offset, true);
+  const all = [...parts, ...central, new Uint8Array(end.buffer)];
+  const total = all.reduce((s, b) => s + b.length, 0);
+  const out = new Uint8Array(total); let p = 0;
+  for (const b of all) { out.set(b, p); p += b.length; }
+  return out;
+}
+
+const xmlEsc = s => String(s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+function colName(c) { let s = ''; c++; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
+function fmtNum(v) { if (!isFinite(v)) return null; if (Number.isInteger(v)) return String(v); const a = Math.abs(v); return a !== 0 && (a < 1e-4 || a >= 1e9) ? v.toExponential(7) : String(Number(v.toPrecision(8))); }
+
+/* sheets: [{ name, rows: Array<Array<string|number|null>>, freeze: {rows, cols}, headerRows, widths }] */
+async function buildXlsx(sheets) {
+  const enc = new TextEncoder();
+  const files = [];
+  const names = [];
+  sheets.forEach((sh, k) => {
+    let nm = String(sh.name).replace(/[\[\]\*\?\/\\:]/g, '_').slice(0, 31) || `Sheet${k + 1}`;
+    while (names.includes(nm)) nm = (nm.slice(0, 28) + '_' + k);
+    names.push(nm);
+  });
+  files.push({ name: '[Content_Types].xml', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+    sheets.map((_, k) => `<Override PartName="/xl/worksheets/sheet${k + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
+    '</Types>') });
+  files.push({ name: '_rels/.rels', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+    '</Relationships>') });
+  files.push({ name: 'xl/workbook.xml', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<sheets>' + names.map((n, k) => `<sheet name="${xmlEsc(n)}" sheetId="${k + 1}" r:id="rId${k + 1}"/>`).join('') + '</sheets></workbook>') });
+  files.push({ name: 'xl/_rels/workbook.xml.rels', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    names.map((_, k) => `<Relationship Id="rId${k + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${k + 1}.xml"/>`).join('') +
+    `<Relationship Id="rId${names.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+    '</Relationships>') });
+  files.push({ name: 'xl/styles.xml', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFEDEFF3"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+    '</styleSheet>') });
+  sheets.forEach((sh, k) => {
+    const hr = sh.headerRows || 0;
+    const out = [];
+    out.push('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">');
+    if (sh.freeze && (sh.freeze.rows || sh.freeze.cols)) {
+      const fr = sh.freeze.rows || 0, fc = sh.freeze.cols || 0;
+      out.push(`<sheetViews><sheetView workbookViewId="0"><pane${fc ? ` xSplit="${fc}"` : ''}${fr ? ` ySplit="${fr}"` : ''} topLeftCell="${colName(fc)}${fr + 1}" activePane="${fr && fc ? 'bottomRight' : fr ? 'bottomLeft' : 'topRight'}" state="frozen"/></sheetView></sheetViews>`);
+    }
+    if (sh.widths) out.push('<cols>' + sh.widths.map((w, c) => `<col min="${c + 1}" max="${c + 1}" width="${w}" customWidth="1"/>`).join('') + '</cols>');
+    out.push('<sheetData>');
+    sh.rows.forEach((row, r) => {
+      const cells = [];
+      row.forEach((v, c) => {
+        if (v === null || v === undefined || v === '') return;
+        const ref = colName(c) + (r + 1);
+        const st = r < hr ? ' s="1"' : '';
+        if (typeof v === 'number') { const s = fmtNum(v); if (s !== null) cells.push(`<c r="${ref}"${st}><v>${s}</v></c>`); }
+        else cells.push(`<c r="${ref}"${st} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`);
+      });
+      out.push(`<row r="${r + 1}">${cells.join('')}</row>`);
+    });
+    out.push('</sheetData></worksheet>');
+    files.push({ name: `xl/worksheets/sheet${k + 1}.xml`, data: enc.encode(out.join('')) });
+  });
+  return zip(files);
+}
+
+function toCSV(rows) {
+  const esc = v => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'number') { const s = fmtNum(v); return s === null ? '' : s; }
+    const s = String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return '﻿' + rows.map(r => r.map(esc).join(',')).join('\r\n');
+}
+
+/* 解析結果 → シート（時系列） */
+function groupToRows(res, g, seriesFilter, i0, i1) {
+  const ser = seriesFilter ? g.series.filter(seriesFilter) : g.series;
+  const head = ['フレーム', '時間'].concat(ser.map(s => s.label));
+  const unit = ['', 's'].concat(ser.map(s => s.unit));
+  const rows = [head, unit];
+  const a = Math.max(0, i0 == null ? 0 : i0), b = Math.min(res.N - 1, i1 == null ? res.N - 1 : i1);
+  for (let i = a; i <= b; i++) {
+    const r = [res.frames[i], Number(res.t[i].toFixed(6))];
+    for (const s of ser) { const v = s.data[i]; r.push(isFinite(v) ? v : null); }
+    rows.push(r);
+  }
+  return rows;
+}
+
+const API = {
+  G, LM_NAMES, POINTS, POINT_BY_KEY, STICK, JOINT_ANGLES, SEGMENTS, SEG_BY_KEY, SEG_ANGLES, CHAINS, BSP_SETS, SEG_TYPES,
+  V, lstsq, matMul, inv3, eigSym3, planarity, calibScale, applyScale, calibHomography, applyHomography, apply2D, calibDLT3D, projectDLT, reconstruct,
+  butterLowpass, fillGaps, deriv, unwrap, interpSeries, analyze, ballInitialVelocity, stats,
+  crc32, zip, buildXlsx, toCSV, groupToRows, colName,
+};
+if (typeof module !== 'undefined' && module.exports) module.exports = API;
+else root.MLCore = API;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>/* ============================================================
+ * 走り幅跳びの指標計算（UI非依存）
+ * 入力の座標は「進行方向を +X、鉛直上向きを +Y」とした実座標（m）
+ * ============================================================ */
+(function (root) {
+'use strict';
+const G = 9.81;
+const C = root.MLCore || (typeof require !== 'undefined' ? require('./core.js') : null);
+const RAD = 180 / Math.PI;
+const fin = v => typeof v === 'number' && isFinite(v);
+
+// 最小二乗の直線（傾き・切片・残差RMS）
+function linfit(ts, ys) {
+  const n = ts.length; if (n < 2) return null;
+  let st = 0, sy = 0, stt = 0, sty = 0;
+  for (let i = 0; i < n; i++) { st += ts[i]; sy += ys[i]; stt += ts[i] * ts[i]; sty += ts[i] * ys[i]; }
+  const d = n * stt - st * st; if (Math.abs(d) < 1e-15) return null;
+  const b = (n * sty - st * sy) / d, a = (sy - b * st) / n;
+  let e = 0; for (let i = 0; i < n; i++) e += (ys[i] - a - b * ts[i]) ** 2;
+  return { a, b, rms: Math.sqrt(e / n) };
+}
+
+/*
+ * series = { t, X, Y, Xf, Yf }  … X,Y: 生（欠損補間済み）, Xf,Yf: 平滑化
+ * ev = { app: 助走区間の開始, td: 接地, to: 離地, fe: 飛翔区間の終わり }（配列の添字）
+ * extra = { legTd, legTo, kneeTd, kneeMin, kneeTo, trunkTd, trunkTo } 角度（任意）
+ */
+function analyzeJump(series, ev, dt) {
+  const { X, Y, Xf, Yf } = series;
+  const N = X.length;
+  const Vx = C.deriv(Xf, dt), Vy = C.deriv(Yf, dt);
+  const out = { Vx, Vy, warnings: [] };
+  const ok = i => i != null && i >= 0 && i < N;
+
+  // 助走速度：助走区間の重心水平位置を時間に対して直線回帰（傾き）
+  if (ok(ev.app) && ok(ev.td) && ev.td - ev.app >= 2) {
+    const ts = [], xs = [];
+    for (let i = ev.app; i <= ev.td; i++) if (fin(X[i])) { ts.push(i * dt); xs.push(X[i]); }
+    const f = linfit(ts, xs);
+    if (f) { out.approach = f.b; out.approachN = ts.length; out.approachDur = (ev.td - ev.app) * dt; out.approachDist = xs.at(-1) - xs[0]; }
+    let s = 0, n = 0; for (let i = ev.app; i <= ev.td; i++) if (fin(Vx[i])) { s += Vx[i]; n++; }
+    if (n) out.approachMean = s / n;
+  } else out.warnings.push('助走区間（開始と接地）を設定すると助走速度を計算します');
+
+  // 接地時
+  if (ok(ev.td)) { out.vxTd = Vx[ev.td]; out.vyTd = Vy[ev.td]; out.yTd = Yf[ev.td]; out.xTd = Xf[ev.td]; }
+  // 離地時（平滑化座標の微分）
+  if (ok(ev.to)) { out.vxToD = Vx[ev.to]; out.vyToD = Vy[ev.to]; out.yTo = Yf[ev.to]; out.xTo = Xf[ev.to]; }
+
+  // 離地時（飛翔期の放物線当てはめ）: x = x0 + vx t, y = y0 + vy t − ½ g t²
+  if (ok(ev.to) && ok(ev.fe) && ev.fe > ev.to) {
+    const ts = [], xs = [], ys = [];
+    for (let i = ev.to; i <= ev.fe; i++) if (fin(X[i]) && fin(Y[i])) { const t = (i - ev.to) * dt; ts.push(t); xs.push(X[i]); ys.push(Y[i] + 0.5 * G * t * t); }
+    if (ts.length >= 3) {
+      const fx = linfit(ts, xs), fy = linfit(ts, ys);
+      if (fx && fy) {
+        out.fit = { x0: fx.a, vx: fx.b, y0: fy.a, vy: fy.b, rmsX: fx.rms, rmsY: fy.rms, n: ts.length, dur: ts.at(-1) };
+        out.vxTo = fx.b; out.vyTo = fy.b;
+      }
+      if (ts.length < 6) out.warnings.push(`飛翔区間の点が ${ts.length} 点と少ないため、踏切速度の誤差が大きくなります（6点以上を推奨）`);
+    } else out.warnings.push('飛翔区間の有効な点が3点未満のため、放物線の当てはめができません');
+  } else out.warnings.push('離地と飛翔区間の終わりを設定すると踏切速度を計算します');
+  if (!fin(out.vxTo) && fin(out.vxToD)) { out.vxTo = out.vxToD; out.vyTo = out.vyToD; out.toByDiff = true; }
+
+  if (fin(out.vxTo) && fin(out.vyTo)) {
+    out.vTo = Math.hypot(out.vxTo, out.vyTo);
+    out.angle = Math.atan2(out.vyTo, out.vxTo) * RAD;
+  }
+  if (ok(ev.td) && ok(ev.to)) {
+    out.contact = (ev.to - ev.td) * dt;
+    if (fin(out.vxTo) && fin(out.vxTd)) out.dVx = out.vxTo - out.vxTd;
+    if (fin(out.vyTo) && fin(out.vyTd)) out.dVy = out.vyTo - out.vyTd;
+    // 接地中の重心：最低点（沈み込み）と水平移動距離
+    let mn = Infinity, imn = -1;
+    for (let i = ev.td; i <= ev.to; i++) if (fin(Yf[i]) && Yf[i] < mn) { mn = Yf[i]; imn = i; }
+    if (imn >= 0) { out.yMinContact = mn; out.iMinContact = imn; if (fin(out.yTd)) out.sink = out.yTd - mn; }
+    if (fin(out.xTd) && fin(out.xTo)) out.dxContact = out.xTo - out.xTd;
+    if (fin(out.yTd) && fin(out.yTo)) out.dyContact = out.yTo - out.yTd;
+  }
+  // 飛翔中の最高到達高：放物線から推定（y0 + vy² / 2g）と、映像内の実測最大
+  if (out.fit) {
+    out.yPeakFit = out.fit.y0 + out.fit.vy * out.fit.vy / (2 * G);
+    out.tPeakFit = out.fit.vy / G;
+    out.riseFit = out.yPeakFit - out.fit.y0;
+  }
+  if (ok(ev.to)) {
+    let mx = -Infinity, imx = -1;
+    const end = ok(ev.fe) ? ev.fe : N - 1;
+    for (let i = ev.to; i <= end; i++) if (fin(Yf[i]) && Yf[i] > mx) { mx = Yf[i]; imx = i; }
+    if (imx >= 0) { out.yPeakObs = mx; out.iPeakObs = imx; }
+  }
+  return out;
+}
+
+/* 局面の自動候補：踏切足のつま先が止まっている区間（接地）のうち、重心が最も高くなる前の最後の区間 */
+function suggestEvents(series, foot, dt, minFrame, maxFrame) {
+  const { Xf, Yf } = series; const N = Xf.length;
+  const lo = Math.max(0, minFrame ?? 0), hi = Math.min(N - 1, maxFrame ?? N - 1);
+  const Vx = C.deriv(Xf, dt);
+  const fx = foot.Xf, fy = foot.Yf; const fvx = C.deriv(fx, dt), fvy = C.deriv(fy, dt);
+  // 重心の最高点
+  let ipk = -1, ymx = -Infinity;
+  for (let i = lo; i <= hi; i++) if (fin(Yf[i]) && Yf[i] > ymx) { ymx = Yf[i]; ipk = i; }
+  if (ipk < 0) return null;
+  const speeds = []; for (let i = lo; i <= ipk; i++) if (fin(Vx[i])) speeds.push(Math.abs(Vx[i]));
+  speeds.sort((a, b) => a - b);
+  const vRun = speeds.length ? speeds[Math.floor(speeds.length / 2)] : 5;
+  const thr = Math.max(0.8, 0.2 * vRun);
+  const stance = i => fin(fvx[i]) && fin(fvy[i]) && Math.hypot(fvx[i], fvy[i]) < thr;
+  // 最高点から遡って、最後の接地区間（速さ < thr）を探す
+  let b = -1;
+  for (let i = ipk; i >= lo; i--) { if (stance(i)) { b = i; break; } }
+  if (b < 0) return null;
+  let a = b; while (a - 1 >= lo && stance(a - 1)) a--;
+  // 区間内で最も遅いフレームから、低いしきい値を超えるところを接地・離地とする
+  const sp = i => fin(fvx[i]) && fin(fvy[i]) ? Math.hypot(fvx[i], fvy[i]) : Infinity;
+  let imin = a; for (let i = a; i <= b; i++) if (sp(i) < sp(imin)) imin = i;
+  const thrLo = Math.max(0.3, 0.08 * vRun);
+  let to = imin; while (to + 1 <= hi && sp(to) <= thrLo) to++;
+  let td = imin; while (td - 1 >= lo && sp(td - 1) <= thrLo) td--;
+  // 飛翔区間の終わり：離地後、重心が離地時の高さより下がる直前（なければ範囲の終わり）
+  let fe = to;
+  for (let i = to + 1; i <= hi; i++) { if (!fin(Yf[i])) break; if (Yf[i] < Yf[to] - 0.02 && i > ipk) break; fe = i; }
+  const app = Math.max(lo, td - Math.round(0.5 / dt));
+  return { app, td, to: Math.min(to, hi), fe, thr };
+}
+
+/* 脚の角度：足首→股関節の線と地面のなす角（鋭角, °） */
+function legAngle(ax, ay, hx, hy) { if (![ax, ay, hx, hy].every(fin)) return NaN; return Math.atan2(Math.abs(hy - ay), Math.abs(hx - ax)) * RAD; }
+
+const API = { G, linfit, analyzeJump, suggestEvents, legAngle };
+if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.LJ = API;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>(() => {
+'use strict';
+const C = window.MLCore, LJ = window.LJ;
+const $ = id => document.getElementById(id);
+const MP_VER = '1.2.2', APP_VERSION = '1.0.0';
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const fin = v => typeof v === 'number' && isFinite(v);
+const fmt = (v, d = 2) => fin(v) ? Number(v).toFixed(d) : '—';
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function toast(msg, ms = 2800) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms); }
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k === 'style') e.style.cssText = v; else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids) if (c != null) e.append(c);
+  return e;
+}
+const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; };
+function f32ToB64(a) { const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+function b64ToF32(b) { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Float32Array(u.buffer); }
+const readText = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(f); });
+
+/* ---------- 保存 ---------- */
+let dlP = null;
+const getDl = () => { if (!window.claude || typeof window.claude.use !== 'function') return Promise.resolve(null); if (!dlP) dlP = Promise.resolve().then(() => window.claude.use('downloads')).catch(() => null); return dlP; };
+async function saveFile(name, data, mime) {
+  const blob = data instanceof Blob ? data : new Blob([data], { type: mime || 'application/octet-stream' });
+  const dl = await getDl();
+  if (dl) { try { await dl.save({ filename: name, data: blob }); toast(`保存しました：${name}`); return; } catch (e) { if (e && e.code === 'declined') { toast('保存をキャンセルしました'); return; } } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000); toast(`保存しました：${name}`);
+}
+
+/* ---------- 状態 ---------- */
+const cam = { video: null, url: null, fileName: '', w: 0, h: 0, dur: 0, fpsFile: 30, fpsCap: 30, fpsCapSet: false, n: 0, frame: 0, shown: -1, pose: null, target: null, locked: false, q: { busy: false, want: null } };
+const st = {
+  foot: 'r', sex: 'm', point: 'com', dir: 'auto', cutoff: 8, maxGap: 10, visThr: 0.5,
+  range: { start: 0, end: 0 },
+  calib: { method: 'scale', scale: { P1: null, P2: null, dist: 5 }, cp: [], c2d: null, report: null },
+  manual: {},
+  ev: { app: null, td: null, to: null, fe: null },
+  model: 'full', numPoses: 1, minConf: 0.5,
+  res: null,
+};
+const ui = { zoom: 1, panX: 0, panY: 0, tf: null, pick: null, cpPick: false, cpSel: 0, manClick: false, editMode: false, pointer: null, drag: null, playing: false, busy: null, cancel: false, hover: {} };
+const EV = [
+  { key: 'app', label: '助走区間の開始', hint: '助走速度を測る区間の始まり（接地の2歩前くらい）', color: '--s7' },
+  { key: 'td', label: '接地', hint: '踏切足が踏切板に着いた最初のフレーム', color: '--s3' },
+  { key: 'to', label: '離地', hint: '踏切足のつま先が離れた最初のフレーム', color: '--s8' },
+  { key: 'fe', label: '飛翔区間の終わり', hint: '着地動作の前で、重心が見えている最後のフレーム', color: '--s4' },
+];
+
+/* ---------- 動画 ---------- */
+const hiddenBox = el('div', { style: 'position:fixed;left:-10000px;top:0;width:4px;height:4px;overflow:hidden;opacity:0;pointer-events:none' });
+document.body.append(hiddenBox);
+async function parseMp4(file) {
+  const rd = async (o, l) => new DataView(await file.slice(o, o + l).arrayBuffer());
+  const str = (dv, o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+  let off = 0, moov = null;
+  for (let g = 0; off < file.size && g < 1000; g++) {
+    const h = await rd(off, 16); if (h.byteLength < 8) break;
+    let size = h.getUint32(0); const type = str(h, 4); let hdr = 8;
+    if (size === 1) { size = Number(h.getBigUint64(8)); hdr = 16; } else if (size === 0) size = file.size - off;
+    if (size < 8) break;
+    if (type === 'moov') { if (size > 200e6) return null; moov = await rd(off + hdr, size - hdr); break; }
+    off += size;
+  }
+  if (!moov) return null;
+  const boxes = (dv, s, e) => { const out = []; let p = s; while (p + 8 <= e) { let size = dv.getUint32(p); const type = str(dv, p + 4); let hdr = 8; if (size === 1) { size = Number(dv.getBigUint64(p + 8)); hdr = 16; } else if (size === 0) size = e - p; if (size < 8 || p + size > e) break; out.push({ type, start: p + hdr, end: p + size }); p += size; } return out; };
+  const find = (dv, b, path) => { let cur = [b]; for (const t of path) { const nx = []; for (const c of cur) nx.push(...boxes(dv, c.start, c.end).filter(x => x.type === t)); cur = nx; if (!cur.length) return null; } return cur[0]; };
+  for (const trak of boxes(moov, 0, moov.byteLength).filter(b => b.type === 'trak')) {
+    const hdlr = find(moov, trak, ['mdia', 'hdlr']); if (!hdlr || str(moov, hdlr.start + 8) !== 'vide') continue;
+    const mdhd = find(moov, trak, ['mdia', 'mdhd']); if (!mdhd) continue;
+    const ts = moov.getUint32(mdhd.start + (moov.getUint8(mdhd.start) === 1 ? 20 : 12));
+    const stts = find(moov, trak, ['mdia', 'minf', 'stbl', 'stts']); if (!stts) continue;
+    const n = moov.getUint32(stts.start + 4); let total = 0, best = 0, bc = 0;
+    for (let i = 0; i < n; i++) { const c = moov.getUint32(stts.start + 8 + i * 8), d = moov.getUint32(stts.start + 12 + i * 8); total += c; if (c > bc) { bc = c; best = d; } }
+    if (best && ts) return { fps: Math.round(ts / best * 1000) / 1000, frames: total };
+  }
+  return null;
+}
+async function detectFps() {
+  const v = cam.video; if (!v || !('requestVideoFrameCallback' in v)) { toast('このブラウザでは fps を自動検出できません。手入力してください'); return; }
+  const meas = (rate, ms) => new Promise(res => { const t = []; let stop = false; const cb = (now, m) => { t.push(m.mediaTime); if (!stop) v.requestVideoFrameCallback(cb); }; v.requestVideoFrameCallback(cb); v.playbackRate = rate; v.play().catch(() => { stop = true; res(t); }); setTimeout(() => { stop = true; v.pause(); res(t); }, ms); });
+  const est = t => { const d = []; for (let i = 1; i < t.length; i++) { const x = t[i] - t[i - 1]; if (x > 1e-4) d.push(x); } if (d.length < 4) return null; d.sort((a, b) => a - b); return 1 / d[Math.floor(d.length * 0.2)]; };
+  let f = est(await meas(1, 700)); if (f && f > 70) f = est(await meas(0.2, 900)) || f;
+  v.pause(); v.playbackRate = 1;
+  if (!f) { toast('fps を検出できませんでした。手入力してください'); return; }
+  const list = [24, 25, 29.97, 30, 50, 59.94, 60, 119.88, 120, 239.76, 240]; let best = null, bd = 0.012;
+  for (const c of list) { const d = Math.abs(f - c) / c; if (d < bd) { bd = d; best = c; } }
+  cam.fpsFile = best ?? Math.round(f * 100) / 100; if (!cam.fpsCapSet) cam.fpsCap = cam.fpsFile;
+  cam.n = Math.max(1, Math.floor(cam.dur * cam.fpsFile + 1e-3));
+  syncVideoInputs(); showFrame(cam.frame); toast(`${cam.fpsFile} fps と推定しました`);
+}
+async function loadVideo(file) {
+  if (!file) return;
+  if (ui.playing) togglePlay();
+  if (cam.video) cam.video.remove();
+  if (cam.url) URL.revokeObjectURL(cam.url);
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.setAttribute('playsinline', '');
+  hiddenBox.append(v); cam.url = URL.createObjectURL(file); v.src = cam.url;
+  try {
+    await new Promise((res, rej) => { v.addEventListener('loadeddata', res, { once: true }); v.addEventListener('error', () => rej(new Error('この動画を再生できません（HEVC の場合は H.264 の MP4 に変換してください）')), { once: true }); setTimeout(() => rej(new Error('動画の読み込みがタイムアウトしました')), 30000); });
+  } catch (e) { toast(e.message, 6000); v.remove(); return; }
+  const sameSize = cam.w === v.videoWidth && cam.h === v.videoHeight && cam.pose;
+  Object.assign(cam, { video: v, fileName: file.name, w: v.videoWidth, h: v.videoHeight, dur: v.duration, shown: -1 });
+  let meta = null; try { meta = await parseMp4(file); } catch (e) { meta = null; }
+  if (meta && meta.fps > 0) { cam.fpsFile = meta.fps; cam.n = meta.frames || Math.floor(cam.dur * cam.fpsFile + 1e-3); }
+  else { cam.n = Math.max(1, Math.floor(cam.dur * cam.fpsFile + 1e-3)); }
+  if (!cam.fpsCapSet) cam.fpsCap = cam.fpsFile;
+  if (!sameSize) { cam.pose = null; st.manual = {}; st.ev = { app: null, td: null, to: null, fe: null }; st.range = { start: 0, end: cam.n - 1 }; }
+  ui.zoom = 1; ui.panX = ui.panY = 0;
+  syncVideoInputs(); renderRange(); renderEvents(); updateManInfo();
+  await showFrame(sameSize ? cam.frame : 0);
+  compute();
+  toast(`${cam.w}×${cam.h}・${cam.fpsFile} fps・${cam.n} コマ。スロー動画は「撮影fps」を撮影時の値にしてください`, 5000);
+}
+function syncVideoInputs() {
+  $('fpsFile').value = cam.fpsFile; $('fpsCap').value = cam.fpsCap;
+  $('camInfo').textContent = cam.w ? `${cam.fileName || '（動画未読込）'} ・ ${cam.w}×${cam.h} ・ ${cam.n} コマ ・ ${(cam.n / cam.fpsCap).toFixed(2)} s（実時間）` : '未読込';
+  $('fpsWarn').hidden = !(cam.w && cam.fpsCap < 100);
+}
+
+function seekRaw(j) {
+  return new Promise(resolve => {
+    const v = cam.video; if (!v) return resolve();
+    const t = Math.min((j + 0.5) / cam.fpsFile, Math.max(0, cam.dur - 0.0005));
+    let seeked = false, framed = !('requestVideoFrameCallback' in v), done = false;
+    const finish = force => { if (done) return; if (force || (seeked && framed)) { done = true; v.removeEventListener('seeked', onS); cam.shown = j; resolve(); } };
+    const onS = () => { seeked = true; if (!framed) setTimeout(() => { framed = true; finish(); }, 90); finish(); };
+    v.addEventListener('seeked', onS);
+    if (!framed) v.requestVideoFrameCallback(() => { framed = true; finish(); });
+    v.currentTime = t; setTimeout(() => finish(true), 4000);
+  });
+}
+async function showFrame(j) {
+  const n = cam.n || (cam.pose ? cam.pose.f0 + cam.pose.n : 1);
+  j = clamp(Math.round(j), 0, Math.max(0, n - 1)); cam.frame = j; updateTimeline();
+  if (!cam.video || cam.locked) { draw(); return; }
+  cam.q.want = j; if (cam.q.busy) return;
+  cam.q.busy = true;
+  while (cam.q.want !== null) { const t = cam.q.want; cam.q.want = null; if (cam.shown !== t) await seekRaw(t); draw(); }
+  cam.q.busy = false;
+  hoverFromFrame();
+}
+
+/* ---------- タイムライン ---------- */
+function updateTimeline() {
+  const n = cam.n || (cam.pose ? cam.pose.f0 + cam.pose.n : 0);
+  const s = $('frameSlider'); s.max = Math.max(0, n - 1); s.value = cam.frame;
+  const evName = EV.find(e => st.ev[e.key] === cam.frame);
+  $('frameInfo').textContent = n ? `F ${cam.frame} / ${n - 1} ・ ${(cam.frame / cam.fpsCap).toFixed(3)} s${evName ? ' ・ ' + evName.label : ''}` : '—';
+  renderRangeBar();
+}
+function renderRangeBar() {
+  const n = Math.max(1, (cam.n || 1) - 1);
+  const f = $('rangeFill'); f.style.left = `${st.range.start / n * 100}%`; f.style.width = `${(st.range.end - st.range.start) / n * 100}%`;
+  const bar = $('rangeBar'); bar.querySelectorAll('.ev').forEach(e => e.remove());
+  for (const e of EV) if (st.ev[e.key] != null) bar.append(el('div', { class: 'ev', style: `left:${st.ev[e.key] / n * 100}%;background:var(${e.color})`, title: e.label }));
+}
+function renderRange() {
+  $('rangeStart').value = st.range.start; $('rangeEnd').value = st.range.end;
+  const N = st.range.end - st.range.start + 1;
+  $('rangeInfo').textContent = N > 0 ? `${N} コマ ・ ${(N / cam.fpsCap).toFixed(2)} s` : '';
+  renderRangeBar();
+}
+function setRange(a, b) {
+  const n0 = cam.n || 1e9; a = clamp(Math.round(a), 0, n0 - 1); b = clamp(Math.round(b), 0, n0 - 1); if (b < a) [a, b] = [b, a];
+  st.range.start = a; st.range.end = b; renderRange(); compute();
+}
+function togglePlay() {
+  const v = cam.video; if (!v) return;
+  if (ui.playing) { ui.playing = false; $('btnPlay').textContent = '▶'; v.pause(); showFrame(cam.frame); return; }
+  ui.playing = true; $('btnPlay').textContent = '❚❚'; v.playbackRate = parseFloat($('playRate').value);
+  const end = st.range.end > st.range.start ? st.range.end : cam.n - 1;
+  if (cam.frame >= end) v.currentTime = ((st.range.end > st.range.start ? st.range.start : 0) + 0.5) / cam.fpsFile;
+  const rv = 'requestVideoFrameCallback' in v;
+  const tick = (now, m) => {
+    if (!ui.playing) return;
+    cam.frame = Math.round(m ? m.mediaTime * cam.fpsFile : v.currentTime * cam.fpsFile - 0.5); cam.shown = -1; updateTimeline(); draw(); hoverFromFrame();
+    if (cam.frame >= end || v.ended) { togglePlay(); return; }
+    rv ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(() => tick());
+  };
+  rv ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(() => tick());
+  v.play().catch(() => { ui.playing = false; $('btnPlay').textContent = '▶'; });
+}
+
+/* ---------- 姿勢データ ---------- */
+function getLm(j) { const p = cam.pose; if (!p) return null; const r = j - p.f0; if (r < 0 || r >= p.n) return null; const b = r * 99; return isFinite(p.data[b]) ? p.data.subarray(b, b + 99) : null; }
+function lmPoint(lm, key) { const P = C.POINT_BY_KEY[key]; if (P.idx !== undefined) return [lm[P.idx * 3], lm[P.idx * 3 + 1], lm[P.idx * 3 + 2]]; const a = lmPoint(lm, P.mid[0]), b = lmPoint(lm, P.mid[1]); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.min(a[2], b[2])]; }
+
+/* ---------- 較正 ---------- */
+function applyCal(u, v) { return C.apply2D(st.calib.c2d, u, v); }
+function worldToImage(P) {
+  const c = st.calib.c2d; if (!c) return null;
+  if (c.type === 'scale') { const ca = Math.cos(c.ang), sa = Math.sin(c.ang); const x0 = P[0] * ca - P[1] * sa, y0 = P[0] * sa + P[1] * ca; return [x0 / c.mpp + c.origin[0], -y0 / c.mpp + c.origin[1]]; }
+  if (!c.Hinv) c.Hinv = C.inv3(c.H); const H = c.Hinv; const w = H[2][0] * P[0] + H[2][1] * P[1] + H[2][2];
+  return [(H[0][0] * P[0] + H[0][1] * P[1] + H[0][2]) / w, (H[1][0] * P[0] + H[1][1] * P[1] + H[1][2]) / w];
+}
+function computeCalib(silent) {
+  const cal = st.calib;
+  try {
+    if (cal.method === 'scale') {
+      const { P1, P2 } = cal.scale; cal.scale.dist = parseFloat($('sDist').value);
+      if (!P1 || !P2) throw new Error('P1 と P2 をクリックで指定してください');
+      cal.c2d = C.calibScale(P1, P2, cal.scale.dist, { alignAxis: true });
+      // 傾きの補正だけを使う（P1→P2 が左向きでも Y は上向きのまま）
+      if (cal.c2d.ang > Math.PI / 2) cal.c2d.ang -= Math.PI; else if (cal.c2d.ang < -Math.PI / 2) cal.c2d.ang += Math.PI;
+      cal.report = `1 px = ${(cal.c2d.mpp * 1000).toFixed(2)} mm ・ 画面の幅 ${(cam.w * cal.c2d.mpp).toFixed(2)} m ・ 傾き補正 ${(cal.c2d.ang * 180 / Math.PI).toFixed(2)}°`;
+    } else {
+      const use = cal.cp.filter(p => p.uv && fin(p.X) && fin(p.Y));
+      if (use.length < 4) throw new Error('座標と画像位置がそろった点が4点以上必要です');
+      cal.c2d = C.calibHomography(use.map(p => p.uv), use.map(p => [p.X, p.Y]));
+      cal.report = `平面射影：${use.length}点 ・ 残差RMS ${(cal.c2d.rmse * 1000).toFixed(1)} mm`;
+    }
+    renderCalib(); compute(); draw();
+    if (!silent) toast('較正を計算しました');
+  } catch (e) { cal.c2d = null; cal.report = null; renderCalib(); if (!silent) toast(e.message, 4500); }
+}
+function renderCalib() {
+  const cal = st.calib;
+  document.querySelectorAll('input[name=cm]').forEach(r => r.checked = r.value === cal.method);
+  $('cScale').hidden = cal.method !== 'scale'; $('cPlane').hidden = cal.method !== 'plane';
+  const { P1, P2 } = cal.scale;
+  $('sP1u').textContent = P1 ? P1[0].toFixed(1) : '—'; $('sP1v').textContent = P1 ? P1[1].toFixed(1) : '—';
+  $('sP2u').textContent = P2 ? P2[0].toFixed(1) : '—'; $('sP2v').textContent = P2 ? P2[1].toFixed(1) : '—';
+  $('sDist').value = cal.scale.dist;
+  const t = $('cpTable'); t.innerHTML = '';
+  t.append(el('thead', {}, el('tr', {}, ...['', 'X (m)', 'Y (m)', '画像 (u, v)', ''].map(h => el('th', { text: h })))));
+  const tb = el('tbody');
+  cal.cp.forEach((p, i) => {
+    const r = el('input', { type: 'radio', name: 'cpsel' }); r.checked = i === ui.cpSel; r.addEventListener('change', () => { ui.cpSel = i; renderCalib(); updateHint(); });
+    const inp = f => { const x = el('input', { type: 'number', step: '0.01', value: fin(p[f]) ? p[f] : '', style: 'width:70px' }); x.addEventListener('change', () => { p[f] = parseFloat(x.value); cal.c2d = null; }); return el('td', {}, x); };
+    tb.append(el('tr', { class: i === ui.cpSel ? 'sel' : '' }, el('td', {}, r), inp('X'), inp('Y'), el('td', { class: 'mono', text: p.uv ? `${p.uv[0].toFixed(1)}, ${p.uv[1].toFixed(1)}` : '—' }),
+      el('td', {}, el('button', { class: 'btn sm', text: '×', onclick: () => { cal.cp.splice(i, 1); ui.cpSel = clamp(ui.cpSel, 0, cal.cp.length - 1); renderCalib(); draw(); } }))));
+  });
+  t.append(tb);
+  const box = $('calibResult'); box.innerHTML = '';
+  if (cal.c2d && cal.report) box.append(el('div', { class: 'result-box' }, el('div', { class: 'note okc', text: '較正済み：' + cal.report })));
+  else box.append(el('div', { class: 'note warn', text: '未較正：速度は較正しないと計算できません' }));
+}
+
+/* ---------- 姿勢推定（MediaPipe） ---------- */
+const MP = { vision: null, fileset: null, models: {} };
+const CDN = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`;
+const MODEL_URL = n => `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${n}/float16/1/pose_landmarker_${n}.task`;
+function setEngine(t, s) { $('engineStatus').textContent = '姿勢推定エンジン: ' + t; $('engineDot').className = 'status-dot ' + (s || ''); }
+async function fetchProg(url, label) {
+  const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+  const total = +r.headers.get('content-length') || 0; if (!r.body || !total) return new Uint8Array(await r.arrayBuffer());
+  const rd = r.body.getReader(), ch = []; let got = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; ch.push(value); got += value.length; setEngine(`${label} ${Math.round(got / total * 100)}%`, 'busy'); }
+  const out = new Uint8Array(got); let p = 0; for (const c of ch) { out.set(c, p); p += c.length; } return out;
+}
+async function createLandmarker() {
+  if (!MP.vision) {
+    setEngine('読込中…', 'busy');
+    MP.vision = await import(`${CDN}/vision_bundle.mjs`);
+    MP.fileset = await MP.vision.FilesetResolver.forVisionTasks(`${CDN}/wasm`);
+  }
+  if (!MP.models[st.model]) {
+    try { MP.models[st.model] = await fetchProg(MODEL_URL(st.model), `モデル(${st.model})取得中`); }
+    catch (e) { $('modelFileWrap').hidden = false; setEngine('モデルを取得できません', 'err'); throw new Error('モデルを取得できませんでした。インターネット接続を確認するか、モデルファイル（.task）を選択してください'); }
+  }
+  const opts = { baseOptions: { modelAssetBuffer: new Uint8Array(MP.models[st.model]), delegate: 'GPU' }, runningMode: 'VIDEO', numPoses: st.numPoses,
+    minPoseDetectionConfidence: st.minConf, minPosePresenceConfidence: st.minConf, minTrackingConfidence: st.minConf, outputSegmentationMasks: false };
+  let lm, dg = 'GPU';
+  try { lm = await MP.vision.PoseLandmarker.createFromOptions(MP.fileset, opts); }
+  catch (e) { opts.baseOptions.delegate = 'CPU'; dg = 'CPU'; opts.baseOptions.modelAssetBuffer = new Uint8Array(MP.models[st.model]); lm = await MP.vision.PoseLandmarker.createFromOptions(MP.fileset, opts); }
+  setEngine(`準備完了（${st.model} / ${dg}）`, 'ok');
+  return lm;
+}
+const workCv = document.createElement('canvas');
+function grab() { if (workCv.width !== cam.w || workCv.height !== cam.h) { workCv.width = cam.w; workCv.height = cam.h; } const ctx = workCv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(cam.video, 0, 0, cam.w, cam.h); return ctx; }
+function setBusy(k) { ui.busy = k; $('runPose').disabled = !!k; $('manAuto').disabled = !!k; $('cancelPose').disabled = k !== 'pose'; $('manStop').disabled = k !== 'track'; }
+async function runPose() {
+  if (ui.busy) return;
+  if (!cam.video) { toast('先に動画を読み込んでください'); return; }
+  if (ui.playing) togglePlay();
+  const j0 = st.range.start, j1 = st.range.end, n = j1 - j0 + 1;
+  if (n < 5) { toast('解析範囲を設定してください'); return; }
+  setBusy('pose'); ui.cancel = false;
+  let lmk;
+  try { $('poseStatus').textContent = 'エンジンを準備しています…（初回は数十秒かかります）'; lmk = await createLandmarker(); }
+  catch (e) { setBusy(null); $('poseStatus').textContent = e.message; toast(e.message, 6000); return; }
+  const pose = { f0: j0, n, data: new Float32Array(n * 99).fill(NaN), world: new Float32Array(n * 99).fill(NaN), model: st.model };
+  cam.pose = pose; cam.locked = true;
+  let prev = cam.target ? [cam.target.u, cam.target.v] : null, found = 0; const t0 = performance.now(); const dtMs = Math.max(1, Math.round(1000 / cam.fpsFile));
+  try {
+    for (let j = j0; j <= j1 && !ui.cancel; j++) {
+      await seekRaw(j); grab();
+      const r = lmk.detectForVideo(workCv, (j - j0 + 1) * dtMs);
+      const L = r.landmarks || [], W = r.worldLandmarks || [];
+      if (L.length) {
+        let pick = 0;
+        if (L.length > 1) { let best = Infinity; L.forEach((lm, q) => { const hx = (lm[23].x + lm[24].x) / 2 * cam.w, hy = (lm[23].y + lm[24].y) / 2 * cam.h; let d; if (prev) d = Math.hypot(hx - prev[0], hy - prev[1]); else { const xs = lm.map(p => p.x), ys = lm.map(p => p.y); d = -(Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)); } if (d < best) { best = d; pick = q; } }); }
+        const lm = L[pick], wl = W[pick], b = (j - j0) * 99;
+        for (let i = 0; i < 33; i++) { pose.data[b + i * 3] = lm[i].x * cam.w; pose.data[b + i * 3 + 1] = lm[i].y * cam.h; pose.data[b + i * 3 + 2] = lm[i].visibility ?? 1; if (wl) { pose.world[b + i * 3] = wl[i].x; pose.world[b + i * 3 + 1] = wl[i].y; pose.world[b + i * 3 + 2] = wl[i].z; } }
+        prev = [(lm[23].x + lm[24].x) / 2 * cam.w, (lm[23].y + lm[24].y) / 2 * cam.h]; found++;
+      }
+      cam.frame = j;
+      const done = j - j0 + 1;
+      if (done % 2 === 0 || j === j1) { cam.shown = j; updateTimeline(); draw(); const el_ = (performance.now() - t0) / 1000; $('poseProg').style.width = `${done / n * 100}%`; $('poseStatus').textContent = `${done}/${n} コマ ・ 経過 ${el_.toFixed(0)} s ・ 残り約 ${(el_ / done * (n - done)).toFixed(0)} s`; }
+    }
+  } catch (e) { console.error(e); toast('推定中にエラー：' + e.message, 6000); }
+  finally { try { lmk.close(); } catch (e) { /* noop */ } cam.locked = false; setBusy(null); }
+  $('poseStatus').textContent = `${ui.cancel ? '中止しました' : '完了'}（検出 ${found}/${n} コマ）`; $('poseProg').style.width = '100%';
+  if (st.point === 'manual') { st.point = 'com'; document.querySelectorAll('input[name=point]').forEach(r => r.checked = r.value === 'com'); }
+  compute(); draw();
+  if (!ui.cancel) { toast('姿勢推定が完了しました。「④ 局面」で接地と離地を設定してください', 5000); if (st.ev.td == null) autoEvents(true); }
+}
+const LR = [[1, 4], [2, 5], [3, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16], [17, 18], [19, 20], [21, 22], [23, 24], [25, 26], [27, 28], [29, 30], [31, 32]];
+function swapLR(a, b) {
+  const p = cam.pose; if (!p) return 0; let n = 0;
+  for (let j = a; j <= b; j++) { const r = j - p.f0; if (r < 0 || r >= p.n) continue; for (const arr of [p.data, p.world]) { const o = r * 99; for (const [x, y] of LR) for (let q = 0; q < 3; q++) { const t = arr[o + x * 3 + q]; arr[o + x * 3 + q] = arr[o + y * 3 + q]; arr[o + y * 3 + q] = t; } } n++; }
+  return n;
+}
+
+/* ---------- 手動の腰の点（クリック＋テンプレート追跡） ---------- */
+function updateManInfo() { $('manInfo').textContent = `手動の点：${Object.keys(st.manual).length}`; }
+function grayRegion(ctx, x0, y0, w, h) {
+  x0 = Math.round(x0); y0 = Math.round(y0); const g = new Float32Array(w * h).fill(NaN);
+  const ax = Math.max(0, x0), ay = Math.max(0, y0), bx = Math.min(cam.w, x0 + w), by = Math.min(cam.h, y0 + h);
+  if (bx <= ax || by <= ay) return { g, w };
+  const d = ctx.getImageData(ax, ay, bx - ax, by - ay).data;
+  for (let y = ay; y < by; y++) for (let x = ax; x < bx; x++) { const s = ((y - ay) * (bx - ax) + (x - ax)) * 4; g[(y - y0) * w + (x - x0)] = 0.299 * d[s] + 0.587 * d[s + 1] + 0.114 * d[s + 2]; }
+  return { g, w };
+}
+function makeTpl(ctx, u, v, r) { const n = 2 * r + 1, reg = grayRegion(ctx, u - r, v - r, n, n); let m = 0, c = 0; for (const x of reg.g) if (isFinite(x)) { m += x; c++; } m /= c || 1; const t = new Float32Array(n * n); let ss = 0; for (let i = 0; i < n * n; i++) { t[i] = isFinite(reg.g[i]) ? reg.g[i] - m : 0; ss += t[i] * t[i]; } return { t, r, n, norm: Math.sqrt(ss) }; }
+function match(ctx, tpl, pu, pv, R) {
+  const { t, r, n, norm } = tpl, reg = grayRegion(ctx, pu - R - r, pv - R - r, 2 * (R + r) + 1, 2 * (R + r) + 1), W = reg.w, S = 2 * R + 1, sc = new Float32Array(S * S).fill(-1);
+  let best = -2, bx = 0, by = 0;
+  for (let dy = 0; dy < S; dy++) for (let dx = 0; dx < S; dx++) {
+    let sw = 0, sww = 0, stw = 0, bad = false;
+    for (let y = 0; y < n && !bad; y++) { const row = (dy + y) * W + dx; for (let x = 0; x < n; x++) { const w = reg.g[row + x]; if (!isFinite(w)) { bad = true; break; } sw += w; sww += w * w; stw += t[y * n + x] * w; } }
+    if (bad) continue; const vw = sww - sw * sw / (n * n); const s = vw > 1e-6 && norm > 1e-6 ? stw / (norm * Math.sqrt(vw)) : 0; sc[dy * S + dx] = s; if (s > best) { best = s; bx = dx; by = dy; }
+  }
+  const sub = (a, b, c) => { const d = a - 2 * b + c; return Math.abs(d) > 1e-9 ? clamp(0.5 * (a - c) / d, -0.5, 0.5) : 0; };
+  const ox = bx > 0 && bx < S - 1 ? sub(sc[by * S + bx - 1], best, sc[by * S + bx + 1]) : 0, oy = by > 0 && by < S - 1 ? sub(sc[(by - 1) * S + bx], best, sc[(by + 1) * S + bx]) : 0;
+  return { u: Math.round(pu) - R + bx + ox, v: Math.round(pv) - R + by + oy, score: best };
+}
+async function manualAuto() {
+  if (ui.busy || !cam.video) return;
+  let j = cam.frame; if (!st.manual[j]) { toast('まず現在のフレームで腰の位置をクリックしてください（クリック入力を ON）', 4500); return; }
+  if (ui.playing) togglePlay();
+  setBusy('track'); ui.cancel = false; cam.locked = true;
+  const end = st.range.end > j ? st.range.end : cam.n - 1; let n = 0, msg = '';
+  try {
+    await seekRaw(j); let ctx = grab(); const tpl = makeTpl(ctx, st.manual[j][0], st.manual[j][1], 14);
+    let prev = st.manual[j - 1] ? st.manual[j - 1].slice() : null, cur = st.manual[j].slice();
+    const R = Math.max(24, Math.round(cam.w * 0.04));
+    while (j < end && !ui.cancel) {
+      j++; await seekRaw(j); ctx = grab();
+      const pred = prev ? [2 * cur[0] - prev[0], 2 * cur[1] - prev[1]] : cur;
+      const m = match(ctx, tpl, pred[0], pred[1], R);
+      if (m.score < 0.55) { msg = `一致度が低いため F${j} で停止しました。正しい位置をクリックして再開してください`; cam.frame = j; break; }
+      st.manual[j] = [Math.round(m.u * 10) / 10, Math.round(m.v * 10) / 10]; prev = cur; cur = [m.u, m.v]; n++;
+      if (m.score > 0.85) { const nt = makeTpl(ctx, m.u, m.v, 14); for (let i = 0; i < tpl.t.length; i++) tpl.t[i] = 0.7 * tpl.t[i] + 0.3 * nt.t[i]; let ss = 0; for (const x of tpl.t) ss += x * x; tpl.norm = Math.sqrt(ss); }
+      cam.frame = j; cam.shown = j; updateTimeline(); draw(); if (n % 5 === 0) await sleep(0);
+    }
+  } catch (e) { msg = 'エラー：' + e.message; } finally { cam.locked = false; setBusy(null); }
+  updateManInfo(); if (msg) toast(msg, 6000); else toast(`${n} コマを追跡しました`);
+  compute(); showFrame(cam.frame);
+}
+
+/* ---------- 解析 ---------- */
+function bspSegs() { return C.BSP_SETS[st.sex === 'f' ? 'deLeva_f' : 'deLeva_m'].segs; }
+function imgSeries(start, N) {
+  const p = cam.pose, thr = st.visThr;
+  const lmk = Array.from({ length: 33 }, () => ({ u: new Float64Array(N).fill(NaN), v: new Float64Array(N).fill(NaN) }));
+  if (!p) return { lmk };
+  for (let i = 0; i < N; i++) { const r = start + i - p.f0; if (r < 0 || r >= p.n) continue; for (let q = 0; q < 33; q++) { const b = r * 99 + q * 3; if (isFinite(p.data[b]) && p.data[b + 2] >= thr) { lmk[q].u[i] = p.data[b]; lmk[q].v[i] = p.data[b + 1]; } } }
+  return { lmk };
+}
+function compute() {
+  st.res = null;
+  const warn = [];
+  const start = st.range.start, end = st.range.end, N = end - start + 1;
+  if (!cam.n || N < 5) { renderResults(['動画を読み込み、解析範囲を設定してください']); return; }
+  if (!st.calib.c2d) { renderResults(['「② 較正」で長さの基準を計算すると、速度と位置が表示されます']); return; }
+  const dt = 1 / cam.fpsCap, fs = cam.fpsCap;
+  const t = Float64Array.from({ length: N }, (_, i) => i * dt);
+  const frames = Int32Array.from({ length: N }, (_, i) => start + i);
+  let rawW, filtW, footW = null, R = null;
+  if (st.point === 'manual') {
+    const X = new Float64Array(N).fill(NaN), Y = new Float64Array(N).fill(NaN);
+    for (let i = 0; i < N; i++) { const m = st.manual[start + i]; if (m) { const q = applyCal(m[0], m[1]); X[i] = q[0]; Y[i] = q[1]; } }
+    if (!X.some(fin)) { renderResults(['「③ 追跡」で腰の位置をクリック（または自動追跡）してください']); return; }
+    rawW = [C.fillGaps(X, st.maxGap), C.fillGaps(Y, st.maxGap)];
+    filtW = rawW.map(s => C.butterLowpass(s, fs, st.cutoff));
+  } else {
+    if (!cam.pose) { renderResults(['「③ 追跡」で姿勢を推定してください（または「腰（手動でクリック）」を選ぶ）']); return; }
+    const input = { mode: '2d', N, dt, t, frames, imgSeries: [imgSeries(start, N)], calib2d: st.calib.c2d, tracks: [], world: null,
+      opts: { cutoff: st.cutoff, maxGap: st.maxGap, bodyMass: 0, bsp: bspSegs() } };
+    R = C.analyze(input);
+    const R0 = C.analyze(Object.assign({}, input, { opts: Object.assign({}, input.opts, { cutoff: 0 }) }));
+    R.byKey = {}; for (const g of R.groups) for (const s of g.series) R.byKey[s.key] = s;
+    if (st.point === 'com') { filtW = R.comPos; rawW = R0.comPos; } else { filtW = R.fPts.mid_hip; rawW = R0.fPts.mid_hip; }
+    const toe = R0.fPts[`${st.foot}_toe`]; footW = toe.map(s => C.butterLowpass(s, fs, Math.min(25, fs * 0.3)));
+    R.raw0 = R0;
+  }
+  // 走る向き
+  const vx0 = C.deriv(filtW[0], dt).filter(fin).sort((a, b) => a - b);
+  const med = vx0.length ? vx0[Math.floor(vx0.length / 2)] : 1;
+  const dir = st.dir === 'right' ? 1 : st.dir === 'left' ? -1 : (med >= 0 ? 1 : -1);
+  const flip = s => s.map(v => v * dir);
+  const series = { X: flip(rawW[0]), Y: rawW[1], Xf: flip(filtW[0]), Yf: filtW[1] };
+  const evi = {}; for (const e of EV) { const f = st.ev[e.key]; evi[e.key] = f != null && f >= start && f <= end ? f - start : null; if (f != null && evi[e.key] == null) warn.push(`${e.label}（F${f}）が解析範囲の外です`); }
+  const J = LJ.analyzeJump(series, evi, dt);
+  warn.push(...J.warnings);
+  // 姿勢から角度
+  const ang = {};
+  if (R) {
+    const s = st.foot, F = R.fPts;
+    const leg = i => { if (i == null) return NaN; return LJ.legAngle(F[`${s}_an`][0][i] * dir, F[`${s}_an`][1][i], F[`${s}_hip`][0][i] * dir, F[`${s}_hip`][1][i]); };
+    const knee = R.byKey[`ja.${s}_knee`].data;
+    const trunk = i => { if (i == null) return NaN; const dx = (F.mid_sh[0][i] - F.mid_hip[0][i]) * dir, dy = F.mid_sh[1][i] - F.mid_hip[1][i]; return Math.atan2(dx, dy) * 180 / Math.PI; };
+    ang.legTd = leg(evi.td); ang.legTo = leg(evi.to); ang.kneeTd = evi.td != null ? knee[evi.td] : NaN; ang.kneeTo = evi.to != null ? knee[evi.to] : NaN;
+    if (evi.td != null && evi.to != null) { let mn = Infinity, im = -1; for (let i = evi.td; i <= evi.to; i++) if (fin(knee[i]) && knee[i] < mn) { mn = knee[i]; im = i; } ang.kneeMin = mn; ang.kneeMinI = im; }
+    ang.trunkTd = trunk(evi.td); ang.trunkTo = trunk(evi.to);
+    ang.kneeSeries = knee;
+    const sideMiss = (evi.td != null && !fin(ang.legTd)) || (evi.to != null && !fin(ang.legTo));
+    if (sideMiss) warn.push('踏切足の足首・股関節が推定できていないフレームがあります');
+  }
+  st.res = { N, dt, start, t, frames, dir, series, filtW, rawW, footW, J, ang, evi, R };
+  renderResults(warn); draw();
+}
+
+/* ---------- 局面 ---------- */
+function renderEvents() {
+  const box = $('evRows'); box.innerHTML = '';
+  for (const e of EV) {
+    const f = st.ev[e.key];
+    box.append(el('div', { class: 'ev-row' },
+      el('div', { class: 'nm' }, el('span', { class: 'dot-ev', style: `background:var(${e.color})` }), e.label, el('small', { text: e.hint })),
+      el('span', { class: 'mono val', text: f == null ? '—' : `F${f}` }),
+      el('button', { class: 'btn sm', text: '現在のフレーム', onclick: () => { st.ev[e.key] = cam.frame; renderEvents(); renderRangeBar(); updateTimeline(); compute(); } }),
+      el('button', { class: 'btn sm', text: '移動', disabled: f == null, onclick: () => showFrame(f) })));
+  }
+}
+function autoEvents(quiet) {
+  const r = st.res;
+  if (!r || !r.footW) { if (!quiet) toast('自動検出には姿勢推定と較正が必要です'); return; }
+  const fs = { Xf: r.footW[0].map(v => v * r.dir), Yf: r.footW[1] };
+  const sug = LJ.suggestEvents(r.series, fs, r.dt);
+  if (!sug) { if (!quiet) toast('候補が見つかりませんでした。手動で設定してください'); return; }
+  st.ev = { app: r.start + sug.app, td: r.start + sug.td, to: r.start + sug.to, fe: r.start + sug.fe };
+  renderEvents(); renderRangeBar(); updateTimeline(); compute();
+  toast(`候補：接地 F${st.ev.td}・離地 F${st.ev.to}。映像をコマ送りして確認してください`, 5000);
+}
+
+/* ---------- 結果の表示 ---------- */
+function kpi(k, v, unit, d, cls) { return el('div', { class: 'kpi ' + (cls || '') }, el('div', { class: 'k', text: k }), el('div', { class: 'v' }, v, unit ? el('small', { text: unit }) : null), d ? el('div', { class: 'd', text: d }) : null); }
+function renderResults(warn) {
+  const r = st.res, J = r && r.J, a = r ? r.ang : {};
+  const w = $('resWarn'); w.innerHTML = ''; (warn || []).forEach(m => w.append(el('p', { class: 'note warn', text: m })));
+  const ks = $('kpiSpeed'), kp = $('kpiPos'); ks.innerHTML = ''; kp.innerHTML = '';
+  $('posTitle').textContent = st.point === 'com' ? '重心の位置' : '腰の位置（重心の代わり）';
+  $('resInfo').textContent = r ? `${r.N} コマ ・ ${(1 / r.dt).toFixed(0)} Hz ・ 追う点：${{ com: '身体重心', hip: '腰（股関節中点）', manual: '腰（手動）' }[st.point]} ・ 走る向き：${r.dir > 0 ? '右へ' : '左へ'}` : '';
+  const evf = k => st.ev[k] != null ? `F${st.ev[k]}` : '—';
+  const pn = st.point === 'com' ? '重心' : '腰';
+  ks.append(
+    kpi('助走速度', fmt(J && J.approach), 'm/s', J && fin(J.approach) ? `${evf('app')}〜${evf('td')} の${pn}の水平速度（${fmt(J.approachDur, 2)} s 間）` : '助走区間の開始と接地を設定', 'main'),
+    kpi('踏切時の水平速度', fmt(J && J.vxTo), 'm/s', '離地の瞬間', 'vx main'),
+    kpi('踏切時の鉛直速度', fmt(J && J.vyTo), 'm/s', '離地の瞬間（上向き正）', 'vy main'),
+    kpi('踏切角度', fmt(J && J.angle, 1), '°', `${pn}の速度の向き（水平から）`, 'main'),
+    kpi('踏切速度（合成）', fmt(J && J.vTo), 'm/s', J && J.toByDiff ? '平滑化座標の微分から' : '飛翔期の放物線から'),
+    kpi('接地時間', fmt(J && J.contact, 3), 's', `${evf('td')}〜${evf('to')}`),
+    kpi('接地時の水平速度', fmt(J && J.vxTd), 'm/s', '踏切足が着いた瞬間', 'vx'),
+    kpi('水平速度の変化', J && fin(J.dVx) ? (J.dVx > 0 ? '+' : '') + J.dVx.toFixed(2) : '—', 'm/s', '離地 − 接地（減速はマイナス）', 'vx'),
+    kpi('鉛直速度の変化', J && fin(J.dVy) ? (J.dVy > 0 ? '+' : '') + J.dVy.toFixed(2) : '—', 'm/s', '離地 − 接地（獲得量）', 'vy'));
+  kp.append(
+    kpi('接地時の重心高', fmt(J && J.yTd), 'm', '地面（P1 の高さ）から'),
+    kpi('接地中の沈み込み', J && fin(J.sink) ? (J.sink * 100).toFixed(1) : '—', 'cm', '接地時から最も低い点まで'),
+    kpi('離地時の重心高', fmt(J && J.yTo), 'm', '地面から'),
+    kpi('重心高の変化（接地→離地）', J && fin(J.dyContact) ? (J.dyContact >= 0 ? '+' : '') + (J.dyContact * 100).toFixed(1) : '—', 'cm', ''),
+    kpi('接地中の重心の水平移動', fmt(J && J.dxContact), 'm', '接地〜離地'),
+    kpi('最高到達高（推定）', fmt(J && J.yPeakFit), 'm', J && fin(J.riseFit) ? `離地から +${(J.riseFit * 100).toFixed(0)} cm（放物線から）` : '飛翔期の放物線から'));
+  // 詳細表
+  const tb = $('detailTable'); tb.innerHTML = '';
+  tb.append(el('thead', {}, el('tr', {}, ...['項目', '接地', '最大屈曲', '離地', '説明'].map(h => el('th', { text: h })))));
+  const body = el('tbody');
+  const row = (name, td, mid, to, d) => body.append(el('tr', {}, el('td', { text: name }), el('td', { class: 'mono', text: td }), el('td', { class: 'mono', text: mid }), el('td', { class: 'mono', text: to }), el('td', { text: d, style: 'text-align:left;white-space:normal;color:var(--text-2)' })));
+  row('重心の水平速度 (m/s)', fmt(J && J.vxTd), '', fmt(J && J.vxTo), '離地は飛翔期の放物線から（微分値：' + fmt(J && J.vxToD) + '）');
+  row('重心の鉛直速度 (m/s)', fmt(J && J.vyTd), '', fmt(J && J.vyTo), '上向きが正（離地の微分値：' + fmt(J && J.vyToD) + '）');
+  row('踏切脚の角度 (°)', fmt(a.legTd, 1), '', fmt(a.legTo, 1), '足首と股関節を結ぶ線と地面のなす角（鋭角）');
+  row('踏切脚の膝関節角度 (°)', fmt(a.kneeTd, 1), fmt(a.kneeMin, 1), fmt(a.kneeTo, 1), '180° でまっすぐ。最大屈曲は接地中の最小値');
+  row('体幹の前傾角 (°)', fmt(a.trunkTd, 1), '', fmt(a.trunkTo, 1), '鉛直からの傾き。進行方向へ倒れると正（後傾はマイナス）');
+  if (J && J.fit) row('放物線の当てはめ', '', '', `${J.fit.n} 点`, `飛翔期 ${(J.fit.dur * 1000).toFixed(0)} ms・残差 RMS 水平 ${(J.fit.rmsX * 1000).toFixed(1)} mm / 鉛直 ${(J.fit.rmsY * 1000).toFixed(1)} mm`);
+  tb.append(body);
+  drawCharts();
+}
+
+/* ---------- グラフ ---------- */
+function niceStep(range, target) { const raw = range / Math.max(1, target), p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+const tick = (v, s) => v.toFixed(Math.max(0, Math.min(4, -Math.floor(Math.log10(s) + 1e-9))));
+function prepCanvas(cv) { const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); } const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); return { ctx, W, H }; }
+function axes(ctx, W, H, m, x0, x1, y0, y1, xLabel, yLabel) {
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const ys = niceStep(y1 - y0, Math.max(3, Math.floor(ph / 44))); y0 = Math.floor(y0 / ys) * ys; y1 = Math.ceil(y1 / ys) * ys;
+  const X = v => m.l + (v - x0) / (x1 - x0) * pw, Y = v => m.t + (1 - (v - y0) / (y1 - y0)) * ph;
+  ctx.font = `11px ${cssVar('--font')}`; ctx.fillStyle = cssVar('--muted'); ctx.strokeStyle = cssVar('--grid'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = y0; v <= y1 + ys / 2; v += ys) { const y = Math.round(Y(v)) + 0.5; ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke(); ctx.fillText(tick(v, ys), m.l - 6, y); }
+  if (y0 < 0 && y1 > 0) { ctx.strokeStyle = cssVar('--axis'); ctx.beginPath(); ctx.moveTo(m.l, Y(0)); ctx.lineTo(W - m.r, Y(0)); ctx.stroke(); }
+  const xs = niceStep(x1 - x0, Math.max(3, Math.floor(pw / 70))); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let v = Math.ceil(x0 / xs) * xs; v <= x1 + 1e-9; v += xs) ctx.fillText(tick(v, xs), X(v), H - m.b + 6);
+  ctx.fillText(xLabel, m.l + pw / 2, H - 14);
+  ctx.save(); ctx.translate(12, m.t + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'middle'; ctx.fillText(yLabel, 0, 0); ctx.restore();
+  ctx.strokeStyle = cssVar('--axis'); ctx.beginPath(); ctx.moveTo(m.l, H - m.b + 0.5); ctx.lineTo(W - m.r, H - m.b + 0.5); ctx.stroke();
+  return { X, Y, pw, ph, y0, y1 };
+}
+function evLines(ctx, g, m, H, xOf, labels) {
+  const r = st.res; ctx.save(); ctx.setLineDash([4, 4]); ctx.font = `11px ${cssVar('--font')}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  for (const e of EV) { if (e.key === 'app' || e.key === 'fe') continue; const i = r.evi[e.key]; if (i == null) continue; const x = Math.round(xOf(i)) + 0.5; ctx.strokeStyle = cssVar(e.color); ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke(); if (labels) { ctx.fillStyle = cssVar('--text-2'); ctx.fillText(e.label, x + 3, 2); } }
+  ctx.restore();
+}
+function legend(id, items) { const lg = $(id); lg.innerHTML = ''; items.forEach(([c, t, dash]) => lg.append(el('span', { class: 'item' }, el('span', { class: 'key', style: `background:${dash ? 'transparent' : c};border-top:${dash ? `2px dashed ${c}` : 'none'}` }), t))); }
+function chartTip(tipId, cv, xPx, rows, title) {
+  const tip = $(tipId); tip.innerHTML = ''; tip.append(el('div', { class: 't', text: title }));
+  rows.forEach(([c, v, lab]) => tip.append(el('div', { class: 'r' }, el('i', { class: 'key', style: `background:${c}` }), el('b', { text: v }), el('span', { text: lab }))));
+  tip.hidden = false; const W = cv.clientWidth, tw = tip.offsetWidth; let lx = xPx + 12; if (lx + tw > W) lx = xPx - tw - 12; tip.style.left = `${Math.max(0, lx)}px`; tip.style.top = '8px';
+}
+function drawCharts() {
+  const r = st.res;
+  for (const [cv, tip, lg] of [['chV', 'tipV', 'lgV'], ['chY', 'tipY', 'lgY'], ['chP', 'tipP', 'lgP']]) { const { ctx, W, H } = prepCanvas($(cv)); if (!r) { $(tip).hidden = true; $(lg).innerHTML = ''; ctx.fillStyle = cssVar('--muted'); ctx.font = `13px ${cssVar('--font')}`; ctx.textAlign = 'center'; ctx.fillText('データがありません', W / 2, H / 2); } }
+  if (!r) return;
+  const m = { l: 52, r: 12, t: 18, b: 34 }, cur = cam.frame - r.start, hov = ui.hover;
+  const c1 = cssVar('--s1'), c2 = cssVar('--s2'), c3 = cssVar('--s3'), c8 = cssVar('--s8');
+  // 速度
+  {
+    const cv = $('chV'), { ctx, W, H } = prepCanvas(cv), { Vx, Vy } = r.J;
+    let lo = Infinity, hi = -Infinity; for (const s of [Vx, Vy]) for (const v of s) if (fin(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    if (!fin(lo)) { lo = 0; hi = 1; } lo = Math.min(lo, 0);
+    const g = axes(ctx, W, H, m, 0, r.t[r.N - 1], lo, hi + (hi - lo) * 0.05, '時間 (s)', '速度 (m/s)');
+    const xi = i => g.X(r.t[i]);
+    if (r.evi.app != null && r.evi.td != null) { ctx.fillStyle = cssVar('--accent-soft'); ctx.fillRect(xi(r.evi.app), m.t, xi(r.evi.td) - xi(r.evi.app), H - m.t - m.b); }
+    evLines(ctx, g, m, H, xi, true);
+    const line = (s, c) => { ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.beginPath(); let p = false; for (let i = 0; i < r.N; i++) { if (!fin(s[i])) { p = false; continue; } const x = xi(i), y = g.Y(s[i]); p ? ctx.lineTo(x, y) : ctx.moveTo(x, y); p = true; } ctx.stroke(); };
+    line(Vx, c1); line(Vy, c2);
+    const J = r.J;
+    if (fin(J.vxTo) && r.evi.to != null) { for (const [v, c] of [[J.vxTo, c1], [J.vyTo, c2]]) { ctx.fillStyle = c; ctx.strokeStyle = cssVar('--surface'); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(xi(r.evi.to), g.Y(v), 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); } }
+    if (fin(J.approach) && r.evi.app != null) { ctx.save(); ctx.setLineDash([6, 4]); ctx.strokeStyle = c1; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(xi(r.evi.app), g.Y(J.approach)); ctx.lineTo(xi(r.evi.td), g.Y(J.approach)); ctx.stroke(); ctx.restore(); }
+    if (cur >= 0 && cur < r.N) { ctx.strokeStyle = cssVar('--text'); ctx.globalAlpha = .5; ctx.beginPath(); ctx.moveTo(Math.round(xi(cur)) + .5, m.t); ctx.lineTo(Math.round(xi(cur)) + .5, H - m.b); ctx.stroke(); ctx.globalAlpha = 1; }
+    if (hov.V != null) chartTip('tipV', cv, xi(hov.V), [[c1, fmt(Vx[hov.V]), '水平速度 m/s'], [c2, fmt(Vy[hov.V]), '鉛直速度 m/s']], `F ${r.start + hov.V} ・ ${r.t[hov.V].toFixed(3)} s`); else $('tipV').hidden = true;
+    ui.geoV = { m, W, x0: 0, x1: r.t[r.N - 1] };
+    legend('lgV', [[c1, '水平速度（進行方向が正）'], [c2, '鉛直速度（上向きが正）'], [c1, '助走速度（区間平均）', true]]);
+  }
+  // 重心高
+  {
+    const cv = $('chY'), { ctx, W, H } = prepCanvas(cv), Y = r.series.Yf;
+    let lo = Infinity, hi = -Infinity; for (const v of Y) if (fin(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    if (!fin(lo)) { lo = 0; hi = 1; } const pad = Math.max(0.02, (hi - lo) * 0.08);
+    const g = axes(ctx, W, H, m, 0, r.t[r.N - 1], lo - pad, hi + pad, '時間 (s)', '重心高 (m)');
+    const xi = i => g.X(r.t[i]);
+    evLines(ctx, g, m, H, xi, true);
+    ctx.strokeStyle = c3; ctx.lineWidth = 2; ctx.beginPath(); let p = false; for (let i = 0; i < r.N; i++) { if (!fin(Y[i])) { p = false; continue; } p ? ctx.lineTo(xi(i), g.Y(Y[i])) : ctx.moveTo(xi(i), g.Y(Y[i])); p = true; } ctx.stroke();
+    const J = r.J;
+    if (J.fit && r.evi.to != null) { ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = c8; ctx.lineWidth = 1.5; ctx.beginPath(); const T = Math.max(J.fit.dur, J.tPeakFit * 2 || 0); for (let k = 0; k <= 40; k++) { const tt = T * k / 40, i = r.evi.to + tt / r.dt; if (i > r.N - 1) break; const y = J.fit.y0 + J.fit.vy * tt - 0.5 * LJ.G * tt * tt; k ? ctx.lineTo(g.X(i * r.dt), g.Y(y)) : ctx.moveTo(g.X(i * r.dt), g.Y(y)); } ctx.stroke(); ctx.restore(); }
+    if (fin(J.iMinContact)) { ctx.fillStyle = c3; ctx.beginPath(); ctx.arc(xi(J.iMinContact), g.Y(J.yMinContact), 4.5, 0, Math.PI * 2); ctx.fill(); }
+    if (cur >= 0 && cur < r.N) { ctx.strokeStyle = cssVar('--text'); ctx.globalAlpha = .5; ctx.beginPath(); ctx.moveTo(Math.round(xi(cur)) + .5, m.t); ctx.lineTo(Math.round(xi(cur)) + .5, H - m.b); ctx.stroke(); ctx.globalAlpha = 1; }
+    if (hov.Y != null) chartTip('tipY', cv, xi(hov.Y), [[c3, fmt(Y[hov.Y], 3), '重心高 m']], `F ${r.start + hov.Y} ・ ${r.t[hov.Y].toFixed(3)} s`); else $('tipY').hidden = true;
+    ui.geoY = { m, W, x0: 0, x1: r.t[r.N - 1] };
+    legend('lgY', [[c3, '重心高（地面から）'], [c8, '飛翔期の放物線', true]]);
+  }
+  // 軌跡
+  {
+    const cv = $('chP'), { ctx, W, H } = prepCanvas(cv), X = r.series.Xf, Y = r.series.Yf;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < r.N; i++) if (fin(X[i]) && fin(Y[i])) { x0 = Math.min(x0, X[i]); x1 = Math.max(x1, X[i]); y0 = Math.min(y0, Y[i]); y1 = Math.max(y1, Y[i]); }
+    if (!fin(x0)) { x0 = 0; x1 = 1; y0 = 0; y1 = 1; }
+    const pad = Math.max(0.03, (y1 - y0) * 0.1);
+    const g = axes(ctx, W, H, m, x0, x1 + 1e-6, y0 - pad, y1 + pad, '水平位置（進行方向, m）', '重心高 (m)');
+    const ph = i => r.evi.td != null && i < r.evi.td ? 'a' : r.evi.to != null && i < r.evi.to ? 'c' : r.evi.to != null ? 'f' : 'a';
+    const col = { a: cssVar('--muted'), c: c3, f: c1 };
+    for (let i = 1; i < r.N; i++) { if (![X[i], Y[i], X[i - 1], Y[i - 1]].every(fin)) continue; ctx.strokeStyle = col[ph(i)]; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(g.X(X[i - 1]), g.Y(Y[i - 1])); ctx.lineTo(g.X(X[i]), g.Y(Y[i])); ctx.stroke(); }
+    const J = r.J;
+    if (J.fit) { ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = c8; ctx.lineWidth = 1.5; ctx.beginPath(); for (let k = 0; k <= 40; k++) { const tt = J.fit.dur * k / 40, x = J.fit.x0 + J.fit.vx * tt, y = J.fit.y0 + J.fit.vy * tt - 0.5 * LJ.G * tt * tt; k ? ctx.lineTo(g.X(x), g.Y(y)) : ctx.moveTo(g.X(x), g.Y(y)); } ctx.stroke(); ctx.restore(); }
+    for (const e of EV) { const i = r.evi[e.key]; if (i == null || e.key === 'app' || e.key === 'fe' || !fin(X[i])) continue; ctx.fillStyle = cssVar(e.color); ctx.strokeStyle = cssVar('--surface'); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(g.X(X[i]), g.Y(Y[i]), 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    if (cur >= 0 && cur < r.N && fin(X[cur])) { ctx.strokeStyle = cssVar('--text'); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(g.X(X[cur]), g.Y(Y[cur]), 7, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.fillStyle = cssVar('--muted'); ctx.font = `11px ${cssVar('--font')}`; ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText('縦方向を拡大して表示', W - m.r, 2);
+    if (hov.P != null && fin(X[hov.P])) chartTip('tipP', cv, g.X(X[hov.P]), [[col[ph(hov.P)], `${fmt(X[hov.P])} m`, '水平位置'], [col[ph(hov.P)], `${fmt(Y[hov.P], 3)} m`, '重心高']], `F ${r.start + hov.P} ・ ${{ a: '助走', c: '接地中', f: '飛翔' }[ph(hov.P)]}`); else $('tipP').hidden = true;
+    ui.geoP = { g, X };
+    legend('lgP', [[col.a, '助走'], [c3, '接地中'], [c1, '飛翔'], [c8, '放物線（当てはめ）', true]]);
+  }
+}
+function hoverFromFrame() { if (st.res) drawCharts(); }
+function bindCharts() {
+  const idxT = (geo, e, cv) => { const r = st.res; if (!r || !geo) return null; const x = e.clientX - cv.getBoundingClientRect().left; const tt = geo.x0 + (x - geo.m.l) / (geo.W - geo.m.l - geo.m.r) * (geo.x1 - geo.x0); return clamp(Math.round(tt / r.dt), 0, r.N - 1); };
+  const idxP = (e, cv) => { const r = st.res; if (!r || !ui.geoP) return null; const x = e.clientX - cv.getBoundingClientRect().left; let best = null, bd = Infinity; const { g, X } = ui.geoP; for (let i = 0; i < r.N; i++) { if (!fin(X[i])) continue; const d = Math.abs(g.X(X[i]) - x); if (d < bd) { bd = d; best = i; } } return best; };
+  const bind = (id, key, f) => {
+    const cv = $(id);
+    cv.addEventListener('pointermove', e => { ui.hover[key] = f(e, cv); drawCharts(); if (e.buttons === 1 && ui.hover[key] != null) showFrame(st.res.start + ui.hover[key]); });
+    cv.addEventListener('pointerleave', () => { ui.hover[key] = null; drawCharts(); });
+    cv.addEventListener('pointerdown', e => { const i = f(e, cv); if (i != null) showFrame(st.res.start + i); });
+    new ResizeObserver(() => drawCharts()).observe(cv.parentElement);
+  };
+  bind('chV', 'V', (e, cv) => idxT(ui.geoV, e, cv)); bind('chY', 'Y', (e, cv) => idxT(ui.geoY, e, cv)); bind('chP', 'P', idxP);
+}
+
+/* ---------- ビューア ---------- */
+function resizeCv(cv) { const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); } const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return { ctx, W, H, dpr }; }
+function arrow(ctx, x0, y0, x1, y1, c, w) {
+  const a = Math.atan2(y1 - y0, x1 - x0), L = Math.hypot(x1 - x0, y1 - y0); if (L < 2) return;
+  for (const [lw, col] of [[w + 3, 'rgba(0,0,0,.6)'], [w, c]]) { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1 - Math.cos(a) * 6, y1 - Math.sin(a) * 6); ctx.stroke(); }
+  ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - Math.cos(a - 0.4) * 13, y1 - Math.sin(a - 0.4) * 13); ctx.lineTo(x1 - Math.cos(a + 0.4) * 13, y1 - Math.sin(a + 0.4) * 13); ctx.closePath(); ctx.fill();
+}
+function label(ctx, x, y, txt, c) { ctx.font = `700 13px ${cssVar('--mono')}`; const w = ctx.measureText(txt).width; ctx.fillStyle = 'rgba(13,13,12,.85)'; ctx.fillRect(x - 4, y - 11, w + 8, 20); ctx.fillStyle = c; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(txt, x, y - 1); }
+function draw() {
+  const cv = $('view'); const { ctx, W, H, dpr } = resizeCv(cv);
+  ctx.fillStyle = '#0d0d0c'; ctx.fillRect(0, 0, W, H);
+  $('dropHint').hidden = !!cam.w; if (!cam.w) { ui.tf = null; return; }
+  const s = Math.min(W / cam.w, H / cam.h) * ui.zoom, ox = (W - cam.w * s) / 2 + ui.panX, oy = (H - cam.h * s) / 2 + ui.panY;
+  ui.tf = { s, ox, oy, W, H };
+  if (cam.video && cam.video.readyState >= 2) ctx.drawImage(cam.video, ox, oy, cam.w * s, cam.h * s); else { ctx.fillStyle = '#1c1c1a'; ctx.fillRect(ox, oy, cam.w * s, cam.h * s); }
+  const T = (u, v) => [ox + u * s, oy + v * s];
+  const yellow = cssVar('--s4');
+  // 較正
+  if ($('showCalib').checked) {
+    const cal = st.calib;
+    const cross = (u, v, lab) => { const [x, y] = T(u, v); ctx.strokeStyle = '#000'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(x - 9, y); ctx.lineTo(x + 9, y); ctx.moveTo(x, y - 9); ctx.lineTo(x, y + 9); ctx.stroke(); ctx.strokeStyle = yellow; ctx.lineWidth = 1.6; ctx.stroke(); label(ctx, x + 8, y - 14, lab, yellow); };
+    if (cal.method === 'scale') { if (cal.scale.P1) cross(...cal.scale.P1, 'P1'); if (cal.scale.P2) cross(...cal.scale.P2, 'P2'); }
+    else cal.cp.forEach((p, i) => p.uv && cross(...p.uv, String(i + 1)));
+  }
+  // 骨格
+  const lm = getLm(cam.frame);
+  if (lm && $('showSkel').checked) {
+    ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    for (const [a, b] of C.STICK) { const pa = lmPoint(lm, a), pb = lmPoint(lm, b); if (!isFinite(pa[0]) || !isFinite(pb[0])) continue; const low = pa[2] < st.visThr || pb[2] < st.visThr; ctx.strokeStyle = low ? 'rgba(200,200,200,.45)' : a.startsWith('l_') && b.startsWith('l_') ? cssVar('--s1') : a.startsWith('r_') && b.startsWith('r_') ? cssVar('--s2') : 'rgba(240,239,236,.9)'; const A = T(pa[0], pa[1]), B = T(pb[0], pb[1]); ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B); ctx.stroke(); }
+    for (const P of C.POINTS) { const p = lmPoint(lm, P.key); if (!isFinite(p[0])) continue; const [x, y] = T(p[0], p[1]); ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fillStyle = p[2] < st.visThr ? 'rgba(0,0,0,.4)' : P.key.startsWith('l_') ? cssVar('--s1') : P.key.startsWith('r_') ? cssVar('--s2') : '#e8e7e2'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = '#0d0d0c'; ctx.stroke(); }
+    const toe = lmPoint(lm, `${st.foot}_toe`); if (isFinite(toe[0])) { const [x, y] = T(toe[0], toe[1]); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.stroke(); }
+  }
+  // 手動の点
+  if (st.point === 'manual' || ui.manClick) {
+    ctx.strokeStyle = cssVar('--s5'); ctx.lineWidth = 1.5; ctx.globalAlpha = .7; ctx.beginPath(); let p = false;
+    for (let f = cam.frame - 60; f <= cam.frame; f++) { const q = st.manual[f]; if (!q) { p = false; continue; } const [x, y] = T(q[0], q[1]); p ? ctx.lineTo(x, y) : ctx.moveTo(x, y); p = true; } ctx.stroke(); ctx.globalAlpha = 1;
+    const q = st.manual[cam.frame]; if (q) { const [x, y] = T(q[0], q[1]); ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.stroke(); ctx.strokeStyle = cssVar('--s5'); ctx.lineWidth = 2; ctx.stroke(); }
+  }
+  // 重心の軌跡と速度ベクトル
+  const r = st.res;
+  if (r && st.calib.c2d) {
+    const [Xw, Yw] = r.filtW; const toImg = i => { const q = worldToImage([Xw[i], Yw[i]]); return q ? T(q[0], q[1]) : null; };
+    if ($('showPath').checked) {
+      ctx.lineWidth = 2; ctx.strokeStyle = yellow; ctx.globalAlpha = .8; ctx.beginPath(); let p = false;
+      for (let i = 0; i < r.N; i++) { if (!fin(Xw[i]) || !fin(Yw[i])) { p = false; continue; } const q = toImg(i); p ? ctx.lineTo(...q) : ctx.moveTo(...q); p = true; } ctx.stroke(); ctx.globalAlpha = 1;
+      for (const e of EV) { const i = r.evi[e.key]; if (i == null || !fin(Xw[i]) || e.key === 'app') continue; const [x, y] = toImg(i); ctx.fillStyle = cssVar(e.color); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      const ci = cam.frame - r.start;
+      if (ci >= 0 && ci < r.N && fin(Xw[ci])) { const [x, y] = toImg(ci); ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 2; ctx.strokeStyle = yellow; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 11, y); ctx.lineTo(x + 11, y); ctx.moveTo(x, y - 11); ctx.lineTo(x, y + 11); ctx.stroke(); }
+    }
+    const J = r.J, it = r.evi.to;
+    if ($('showVec').checked && it != null && fin(J.vxTo) && fin(Xw[it])) {
+      const k = 0.12; // 0.12 秒分の移動量を矢印の長さにする
+      const P0 = [Xw[it], Yw[it]], O = worldToImage(P0), A = worldToImage([P0[0] + J.vxTo * r.dir * k, P0[1]]), B = worldToImage([P0[0], P0[1] + J.vyTo * k]), Rr = worldToImage([P0[0] + J.vxTo * r.dir * k, P0[1] + J.vyTo * k]);
+      const o = T(...O), a = T(...A), b = T(...B), rr = T(...Rr);
+      ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...rr); ctx.lineTo(...b); ctx.stroke(); ctx.restore();
+      arrow(ctx, ...o, ...a, cssVar('--s1'), 3); arrow(ctx, ...o, ...b, cssVar('--s2'), 3); arrow(ctx, ...o, ...rr, '#ffffff', 3.5);
+      const ang0 = Math.atan2(a[1] - o[1], a[0] - o[0]), ang1 = Math.atan2(rr[1] - o[1], rr[0] - o[0]); let d = ang1 - ang0; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(o[0], o[1], 34, ang0, ang0 + d, d < 0); ctx.stroke();
+      const lx = r.dir > 0 ? Math.max(a[0], rr[0]) + 10 : Math.min(a[0], rr[0]) - 170;
+      label(ctx, lx, a[1] + 2, `水平 ${J.vxTo.toFixed(2)} m/s`, cssVar('--s1'));
+      label(ctx, b[0] + (r.dir > 0 ? -150 : 10), b[1] - 4, `鉛直 ${J.vyTo.toFixed(2)} m/s`, cssVar('--s2'));
+      label(ctx, lx, rr[1] - 4, `踏切角度 ${J.angle.toFixed(1)}° ・ ${J.vTo.toFixed(2)} m/s`, '#ffffff');
+    }
+  }
+  // 情報
+  label(ctx, 10, 18, `F ${cam.frame} ・ ${(cam.frame / cam.fpsCap).toFixed(3)} s`, '#e8e7e2');
+  const evNow = EV.find(e => st.ev[e.key] === cam.frame); if (evNow) label(ctx, 10, 42, evNow.label, cssVar(evNow.color));
+  // ルーペ
+  if (ui.pointer && (ui.pick || ui.cpPick || ui.manClick || ui.editMode)) {
+    const [px, py] = ui.pointer, src = 40, dst = 160, mm = 8, dx = px < 200 && py < 200 ? W - dst - mm : mm;
+    ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(cv, (px - src / 2) * dpr, (py - src / 2) * dpr, src * dpr, src * dpr, dx, mm, dst, dst); ctx.strokeStyle = '#f0efec'; ctx.lineWidth = 2; ctx.strokeRect(dx, mm, dst, dst); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(dx + dst / 2, mm + 8); ctx.lineTo(dx + dst / 2, mm + dst - 8); ctx.moveTo(dx + 8, mm + dst / 2); ctx.lineTo(dx + dst - 8, mm + dst / 2); ctx.stroke(); ctx.restore();
+  }
+}
+function updateHint() {
+  const h = $('modeHint'); let m = '';
+  if (ui.pick === 'P1' || ui.pick === 'P2') m = `${ui.pick} をクリック（Esc で中止）`; else if (ui.pick === 'target') m = '選手の腰をクリック';
+  else if (ui.cpPick) m = `較正点 ${ui.cpSel + 1} をクリック`; else if (ui.manClick) m = '腰（大転子）をクリック'; else if (ui.editMode) m = '修正モード：関節点をドラッグ';
+  h.hidden = !m; h.textContent = m;
+}
+function cancelModes() {
+  ui.pick = null; ui.cpPick = false; ui.manClick = false; ui.editMode = false;
+  $('cpPick').textContent = 'クリック入力：OFF'; $('cpPick').classList.remove('on');
+  $('manClick').textContent = 'クリック入力：OFF'; $('manClick').classList.remove('on');
+  $('editMode').textContent = '修正モード：OFF'; $('editMode').classList.remove('on');
+  updateHint(); draw();
+}
+function bindViewer() {
+  const cv = $('view');
+  new ResizeObserver(() => draw()).observe(cv);
+  const loc = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const toImg = (x, y) => [(x - ui.tf.ox) / ui.tf.s, (y - ui.tf.oy) / ui.tf.s];
+  cv.addEventListener('wheel', e => { if (!ui.tf) return; e.preventDefault(); const [cx, cy] = loc(e); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, cx, cy); }, { passive: false });
+  cv.addEventListener('pointerleave', () => { ui.pointer = null; draw(); });
+  cv.addEventListener('pointerdown', e => {
+    if (!ui.tf) return; const [x, y] = loc(e); cv.setPointerCapture(e.pointerId);
+    const [u, v] = toImg(x, y); const inside = u >= 0 && v >= 0 && u <= cam.w && v <= cam.h; const R1 = q => Math.round(q * 10) / 10;
+    if (e.button === 0 && inside) {
+      if (ui.pick === 'P1' || ui.pick === 'P2') { st.calib.scale[ui.pick] = [R1(u), R1(v)]; st.calib.c2d = null; ui.pick = null; renderCalib(); updateHint(); draw(); if (st.calib.scale.P1 && st.calib.scale.P2) computeCalib(true); return; }
+      if (ui.pick === 'target') { cam.target = { u: R1(u), v: R1(v) }; ui.pick = null; updateHint(); toast('選手を設定しました'); return; }
+      if (ui.cpPick) { const p = st.calib.cp[ui.cpSel]; if (p) { p.uv = [R1(u), R1(v)]; st.calib.c2d = null; const nx = st.calib.cp.findIndex(q => !q.uv); ui.cpSel = nx >= 0 ? nx : Math.min(ui.cpSel + 1, st.calib.cp.length - 1); renderCalib(); updateHint(); draw(); } return; }
+      if (ui.manClick) { st.manual[cam.frame] = [R1(u), R1(v)]; updateManInfo(); compute(); const stp = parseInt($('manStep').value) || 0; if (stp > 0) showFrame(cam.frame + stp); else draw(); return; }
+      if (ui.editMode) { const lm = getLm(cam.frame); if (lm) { let best = -1, bd = 16; for (let i = 0; i < 33; i++) { const d = Math.hypot(ui.tf.ox + lm[i * 3] * ui.tf.s - x, ui.tf.oy + lm[i * 3 + 1] * ui.tf.s - y); if (d < bd) { bd = d; best = i; } } if (best >= 0) { ui.drag = { type: 'edit', idx: best }; return; } } }
+    }
+    ui.drag = { type: 'pan', x, y, px: ui.panX, py: ui.panY };
+  });
+  cv.addEventListener('pointermove', e => {
+    const [x, y] = loc(e); ui.pointer = [x, y]; const d = ui.drag;
+    if (d && d.type === 'pan') { if (ui.zoom > 1) { ui.panX = d.px + x - d.x; ui.panY = d.py + y - d.y; } draw(); return; }
+    if (d && d.type === 'edit') { const lm = getLm(cam.frame); if (lm) { const [u, v] = toImg(x, y); lm[d.idx * 3] = u; lm[d.idx * 3 + 1] = v; lm[d.idx * 3 + 2] = 1; } draw(); return; }
+    if (ui.pick || ui.cpPick || ui.manClick || ui.editMode) draw();
+  });
+  const end = () => { if (ui.drag && ui.drag.type === 'edit') compute(); ui.drag = null; };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+}
+function zoomAt(f, cx, cy) {
+  const t = ui.tf; if (!t) return; if (cx === undefined) { cx = t.W / 2; cy = t.H / 2; }
+  const nz = clamp(ui.zoom * f, 1, 40), r = nz / ui.zoom, s0 = t.s / ui.zoom;
+  const nox = cx - (cx - t.ox) * r, noy = cy - (cy - t.oy) * r;
+  ui.zoom = nz; ui.panX = nz === 1 ? 0 : nox - (t.W - cam.w * s0 * nz) / 2; ui.panY = nz === 1 ? 0 : noy - (t.H - cam.h * s0 * nz) / 2; draw();
+}
+
+/* ---------- 出力 ---------- */
+function resultRows() {
+  const r = st.res, J = r.J, a = r.ang, rows = [['項目', '値', '単位', '説明']];
+  const add = (k, v, u, d) => rows.push([k, fin(v) ? Number(v.toFixed(4)) : null, u, d]);
+  add('助走速度', J.approach, 'm/s', `F${st.ev.app}〜F${st.ev.td} の重心水平位置を時間で直線回帰した傾き`);
+  add('踏切時の水平速度', J.vxTo, 'm/s', J.toByDiff ? '離地時の平滑化座標の微分' : '飛翔期の重心軌跡に放物線（重力 9.81 m/s²）を当てはめ、離地時の値');
+  add('踏切時の鉛直速度', J.vyTo, 'm/s', '同上（上向き正）');
+  add('踏切速度（合成）', J.vTo, 'm/s', '水平・鉛直速度の合成');
+  add('踏切角度', J.angle, '°', '離地時の重心速度ベクトルと水平のなす角');
+  add('接地時間', J.contact, 's', `F${st.ev.td}〜F${st.ev.to}`);
+  add('接地時の水平速度', J.vxTd, 'm/s', '平滑化座標の微分'); add('接地時の鉛直速度', J.vyTd, 'm/s', '平滑化座標の微分');
+  add('水平速度の変化', J.dVx, 'm/s', '離地 − 接地'); add('鉛直速度の変化', J.dVy, 'm/s', '離地 − 接地');
+  add('接地時の重心高', J.yTd, 'm', '地面から'); add('接地中の最低重心高', J.yMinContact, 'm', ''); add('接地中の沈み込み', J.sink, 'm', '接地時 − 最低');
+  add('離地時の重心高', J.yTo, 'm', ''); add('重心高の変化（接地→離地）', J.dyContact, 'm', ''); add('接地中の重心の水平移動', J.dxContact, 'm', '');
+  add('最高到達高（推定）', J.yPeakFit, 'm', '放物線から：離地高 + 鉛直速度² / 2g'); add('最高到達高（映像内の最大）', J.yPeakObs, 'm', '飛翔区間内の平滑化座標の最大');
+  add('踏切脚の角度（接地）', a.legTd, '°', '足首–股関節の線と地面のなす角'); add('踏切脚の角度（離地）', a.legTo, '°', '');
+  add('膝関節角度（接地）', a.kneeTd, '°', '180°でまっすぐ'); add('膝関節角度（最大屈曲）', a.kneeMin, '°', '接地中の最小値'); add('膝関節角度（離地）', a.kneeTo, '°', '');
+  add('体幹前傾角（接地）', a.trunkTd, '°', '鉛直から、進行方向が正'); add('体幹前傾角（離地）', a.trunkTo, '°', '');
+  return rows;
+}
+function seriesRows() {
+  const r = st.res, J = r.J, a = r.ang;
+  const head = ['フレーム', '時間', '局面', '重心X(生)', '重心Y(生)', '重心X', '重心Y', '水平速度', '鉛直速度', '速さ', '踏切脚の膝角度'];
+  const unit = ['', 's', '', 'm', 'm', 'm', 'm', 'm/s', 'm/s', 'm/s', '°'];
+  const rows = [head, unit];
+  for (let i = 0; i < r.N; i++) {
+    const ph = r.evi.td != null && i < r.evi.td ? '助走' : r.evi.to != null && i < r.evi.to ? '接地' : r.evi.to != null ? '飛翔' : '';
+    const v = x => fin(x) ? x : null;
+    rows.push([r.frames[i], Number(r.t[i].toFixed(6)), ph, v(r.series.X[i]), v(r.series.Y[i]), v(r.series.Xf[i]), v(r.series.Yf[i]), v(J.Vx[i]), v(J.Vy[i]), fin(J.Vx[i]) && fin(J.Vy[i]) ? Math.hypot(J.Vx[i], J.Vy[i]) : null, a.kneeSeries ? v(a.kneeSeries[i]) : null]);
+  }
+  return rows;
+}
+function settingRows() {
+  const c = st.calib;
+  return [['項目', '値'], ['アプリ', `LongJumpLab ${APP_VERSION}`], ['出力日時', new Date().toLocaleString()], ['動画', cam.fileName], ['解像度', `${cam.w}×${cam.h}`], ['ファイルのfps', cam.fpsFile], ['撮影fps', cam.fpsCap],
+    ['解析範囲', `F${st.range.start}〜F${st.range.end}`], ['踏切足', st.foot === 'l' ? '左' : '右'], ['追う点', { com: '身体重心（姿勢推定 MediaPipe, de Leva 1996）', hip: '股関節中点（姿勢推定）', manual: '腰（手動）' }[st.point]],
+    ['姿勢推定モデル', cam.pose ? cam.pose.model : ''], ['平滑化', st.cutoff > 0 ? `4次 Butterworth（位相遅れなし）${st.cutoff} Hz` : 'なし'], ['較正', c.method === 'scale' ? `2点（${c.scale.dist} m）、P1 を原点・地面` : '平面射影'], ['較正の精度', c.report || ''],
+    ['座標系', 'X: 進行方向が正、Y: 鉛直上向きが正（地面 = 0）'], ['重力加速度', '9.81 m/s²'],
+    ...EV.map(e => [e.label, st.ev[e.key] != null ? `F${st.ev[e.key]}（${(st.ev[e.key] / cam.fpsCap).toFixed(4)} s）` : ''])];
+}
+async function exportXlsx() {
+  if (!st.res) { toast('結果がありません（較正・追跡・局面を設定してください）'); return; }
+  const buf = await C.buildXlsx([
+    { name: '結果', rows: resultRows(), headerRows: 1, widths: [26, 12, 8, 60] },
+    { name: '時系列', rows: seriesRows(), headerRows: 2, freeze: { rows: 2, cols: 2 } },
+    { name: '設定', rows: settingRows(), headerRows: 1, widths: [18, 60] }]);
+  await saveFile(`longjump_${stamp()}.xlsx`, buf, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+function projectJSON() {
+  return { type: 'LongJumpLabProject', version: APP_VERSION, savedAt: new Date().toISOString(),
+    cam: { fileName: cam.fileName, w: cam.w, h: cam.h, dur: cam.dur, fpsFile: cam.fpsFile, fpsCap: cam.fpsCap, fpsCapSet: cam.fpsCapSet, n: cam.n, target: cam.target, pose: cam.pose ? { f0: cam.pose.f0, n: cam.pose.n, model: cam.pose.model, data: f32ToB64(cam.pose.data), world: f32ToB64(cam.pose.world) } : null },
+    settings: { foot: st.foot, sex: st.sex, point: st.point, dir: st.dir, cutoff: st.cutoff, model: st.model, numPoses: st.numPoses },
+    range: st.range, calib: { method: st.calib.method, scale: st.calib.scale, cp: st.calib.cp }, manual: st.manual, ev: st.ev };
+}
+function loadProject(o) {
+  if (!o || o.type !== 'LongJumpLabProject') throw new Error('プロジェクトファイルの形式が違います');
+  const keep = cam.video && cam.w === o.cam.w && cam.h === o.cam.h;
+  if (!keep && cam.video) { cam.video.remove(); cam.video = null; }
+  Object.assign(cam, { fileName: keep ? cam.fileName : o.cam.fileName, w: o.cam.w, h: o.cam.h, dur: o.cam.dur, fpsFile: o.cam.fpsFile, fpsCap: o.cam.fpsCap, fpsCapSet: o.cam.fpsCapSet, n: o.cam.n, target: o.cam.target, shown: -1 });
+  cam.pose = o.cam.pose ? { f0: o.cam.pose.f0, n: o.cam.pose.n, model: o.cam.pose.model, data: b64ToF32(o.cam.pose.data), world: b64ToF32(o.cam.pose.world) } : null;
+  Object.assign(st, o.settings || {}); st.range = o.range; st.calib = Object.assign({ c2d: null, report: null }, o.calib); st.manual = o.manual || {}; st.ev = o.ev || st.ev;
+  syncSettings(); syncVideoInputs(); renderRange(); renderEvents(); updateManInfo(); renderCalib(); computeCalib(true); compute(); showFrame(cam.frame);
+  toast(keep ? 'プロジェクトを開きました' : `プロジェクトを開きました。映像を見るには動画（${o.cam.fileName}）を読み込んでください`, 5000);
+}
+function syncSettings() {
+  const set = (n, v) => document.querySelectorAll(`input[name=${n}]`).forEach(r => r.checked = r.value === v);
+  set('foot', st.foot); set('sex', st.sex); set('point', st.point); set('dir', st.dir); $('cutoff').value = st.cutoff; $('modelSel').value = st.model; $('numPoses').value = String(st.numPoses);
+}
+
+/* ---------- イベント登録 ---------- */
+function bind() {
+  document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x === b)); document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab)); }));
+  $('file0').addEventListener('change', e => { loadVideo(e.target.files[0]); e.target.value = ''; });
+  $('stage').addEventListener('dragover', e => e.preventDefault());
+  $('stage').addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) loadVideo(f); });
+  $('fpsFile').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!(v > 0)) return; cam.fpsFile = v; if (!cam.fpsCapSet) cam.fpsCap = v; if (cam.dur) cam.n = Math.max(1, Math.floor(cam.dur * v + 1e-3)); syncVideoInputs(); renderRange(); compute(); showFrame(cam.frame); });
+  $('fpsCap').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!(v > 0)) return; cam.fpsCap = v; cam.fpsCapSet = true; syncVideoInputs(); renderRange(); compute(); });
+  $('detectFps').addEventListener('click', detectFps);
+  const radio = (n, f) => document.querySelectorAll(`input[name=${n}]`).forEach(r => r.addEventListener('change', () => { f(r.value); compute(); draw(); }));
+  radio('foot', v => st.foot = v); radio('sex', v => st.sex = v); radio('point', v => st.point = v); radio('dir', v => st.dir = v);
+  radio('cm', v => { st.calib.method = v; st.calib.c2d = null; if (v === 'plane' && !st.calib.cp.length) for (let i = 0; i < 4; i++) st.calib.cp.push({ X: NaN, Y: NaN, uv: null }); renderCalib(); });
+  $('cutoff').addEventListener('change', e => { st.cutoff = Math.max(0, parseFloat(e.target.value) || 0); compute(); });
+  // タイムライン
+  $('frameSlider').addEventListener('input', e => showFrame(parseInt(e.target.value)));
+  $('btnPrev').addEventListener('click', () => showFrame(cam.frame - 1)); $('btnNext').addEventListener('click', () => showFrame(cam.frame + 1));
+  $('btnPrev10').addEventListener('click', () => showFrame(cam.frame - 10)); $('btnNext10').addEventListener('click', () => showFrame(cam.frame + 10));
+  $('btnPlay').addEventListener('click', togglePlay);
+  $('setStart').addEventListener('click', () => setRange(cam.frame, Math.max(cam.frame, st.range.end)));
+  $('setEnd').addEventListener('click', () => setRange(Math.min(st.range.start, cam.frame), cam.frame));
+  $('rangeStart').addEventListener('change', e => setRange(parseInt(e.target.value) || 0, st.range.end));
+  $('rangeEnd').addEventListener('change', e => setRange(st.range.start, parseInt(e.target.value) || 0));
+  ['showSkel', 'showPath', 'showVec', 'showCalib'].forEach(id => $(id).addEventListener('change', draw));
+  $('zoomIn').addEventListener('click', () => zoomAt(1.4)); $('zoomOut').addEventListener('click', () => zoomAt(1 / 1.4)); $('zoomReset').addEventListener('click', () => { ui.zoom = 1; ui.panX = ui.panY = 0; draw(); });
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, textarea, select')) return;
+    if (e.key === 'ArrowRight') { showFrame(cam.frame + (e.shiftKey ? 10 : 1)); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { showFrame(cam.frame - (e.shiftKey ? 10 : 1)); e.preventDefault(); }
+    else if (e.key === ' ') { togglePlay(); e.preventDefault(); }
+    else if (e.key === 'Escape') cancelModes();
+  });
+  // 較正
+  document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => { cancelModes(); ui.pick = b.dataset.pick; updateHint(); }));
+  $('sDist').addEventListener('change', e => { st.calib.scale.dist = parseFloat(e.target.value) || 0; st.calib.c2d = null; if (st.calib.scale.P1 && st.calib.scale.P2) computeCalib(true); });
+  $('cpAdd').addEventListener('click', () => { st.calib.cp.push({ X: NaN, Y: NaN, uv: null }); ui.cpSel = st.calib.cp.length - 1; renderCalib(); });
+  $('cpPick').addEventListener('click', () => { const on = !ui.cpPick; cancelModes(); ui.cpPick = on; $('cpPick').textContent = on ? 'クリック入力：ON' : 'クリック入力：OFF'; $('cpPick').classList.toggle('on', on); updateHint(); });
+  $('calibCompute').addEventListener('click', () => computeCalib(false));
+  // 追跡
+  $('modelSel').addEventListener('change', e => st.model = e.target.value);
+  $('numPoses').addEventListener('change', e => st.numPoses = parseInt(e.target.value) || 1);
+  $('pickTarget').addEventListener('click', () => { cancelModes(); ui.pick = 'target'; updateHint(); });
+  $('modelFile').addEventListener('change', async e => { const f = e.target.files[0]; if (!f) return; MP.models[st.model] = new Uint8Array(await f.arrayBuffer()); $('modelFileWrap').hidden = true; toast('モデルを読み込みました。もう一度「姿勢を推定」を押してください'); });
+  $('runPose').addEventListener('click', runPose);
+  $('cancelPose').addEventListener('click', () => ui.cancel = true);
+  $('editMode').addEventListener('click', () => { const on = !ui.editMode; cancelModes(); ui.editMode = on; $('editMode').textContent = on ? '修正モード：ON' : '修正モード：OFF'; $('editMode').classList.toggle('on', on); updateHint(); });
+  $('swapLR1').addEventListener('click', () => { if (swapLR(cam.frame, cam.frame)) { compute(); toast('左右を入れ替えました'); } });
+  $('swapLR2').addEventListener('click', () => { const n = swapLR(cam.frame, st.range.end); if (n) { compute(); toast(`${n} コマの左右を入れ替えました`); } });
+  $('manClick').addEventListener('click', () => { const on = !ui.manClick; cancelModes(); ui.manClick = on; $('manClick').textContent = on ? 'クリック入力：ON' : 'クリック入力：OFF'; $('manClick').classList.toggle('on', on); if (on && st.point !== 'manual') { st.point = 'manual'; syncSettings(); } updateHint(); draw(); });
+  $('manAuto').addEventListener('click', manualAuto);
+  $('manStop').addEventListener('click', () => ui.cancel = true);
+  $('manDel').addEventListener('click', () => { delete st.manual[cam.frame]; updateManInfo(); compute(); draw(); });
+  // 局面
+  $('evAuto').addEventListener('click', () => autoEvents(false));
+  // 保存
+  $('exXlsx').addEventListener('click', exportXlsx);
+  $('exCsv').addEventListener('click', () => { if (!st.res) { toast('結果がありません'); return; } saveFile(`longjump_series_${stamp()}.csv`, C.toCSV(seriesRows()), 'text/csv'); });
+  $('exPng').addEventListener('click', () => { const p = ui.pointer; ui.pointer = null; draw(); $('view').toBlob(b => saveFile(`longjump_${stamp()}.png`, b), 'image/png'); ui.pointer = p; });
+  $('projSave').addEventListener('click', () => saveFile(`longjump_project_${stamp()}.json`, JSON.stringify(projectJSON()), 'application/json'));
+  $('projLoad').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { loadProject(JSON.parse(await readText(f))); } catch (err) { toast(err.message, 5000); } });
+}
+
+bind(); bindViewer(); bindCharts();
+syncSettings(); syncVideoInputs(); renderRange(); renderEvents(); renderCalib(); updateManInfo(); updateTimeline(); draw(); compute();
+setEngine('未読込（最初の推定時に読み込みます）'); getDl();
+window.LJApp = { cam, st, ui, compute, showFrame, loadVideo, runPose, autoEvents, computeCalib, setRange, LJ, C };
+})();
+</script>
+</body>
+</html>

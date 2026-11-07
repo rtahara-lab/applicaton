@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>動作分析アプリ</title>
+<style>
+:root {
+  /* layout: 見出し → 3つのアプリのカード（スマホでは縦に並ぶ）→ 共通の注意 */
+  --bg: #f3f3f0;
+  --card: #fcfcfb;
+  --line: #dcdbd6;
+  --ink: #111110;
+  --ink-2: #55544f;
+  --accent: #2a78d6;
+  --a1: #2a78d6;   /* MotionLab */
+  --a2: #d9591f;   /* LongJumpLab */
+  --a3: #188a62;   /* MotionCompare */
+  --a4: #6250d6;   /* SprintLab */
+  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Consolas", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #121211; --card: #1b1b1a; --line: #34342f; --ink: #f0efec; --ink-2: #b9b8b0; --accent: #4a92ea; --a1: #4a92ea; --a2: #ec7a45; --a3: #2fb384; --a4: #9085e9; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #121211; --card: #1b1b1a; --line: #34342f; --ink: #f0efec; --ink-2: #b9b8b0; --accent: #4a92ea; --a1: #4a92ea; --a2: #ec7a45; --a3: #2fb384; --a4: #9085e9; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 var(--font); }
+main { max-width: 1040px; margin: 0 auto; padding: 40px 20px 56px; display: flex; flex-direction: column; gap: 28px; }
+header h1 { font-size: 28px; line-height: 1.3; margin: 0 0 8px; text-wrap: balance; letter-spacing: .01em; }
+header p { margin: 0; color: var(--ink-2); max-width: 62ch; }
+.apps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .apps { grid-template-columns: 1fr; } }
+.app { background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.app.lab { --c: var(--a1); } .app.lj { --c: var(--a2); } .app.cmp { --c: var(--a3); } .app.sp { --c: var(--a4); }
+.app h2 { margin: 0; font-size: 20px; line-height: 1.3; }
+.app .sub { margin: 2px 0 0; color: var(--ink-2); font-size: 13.5px; }
+.app ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.app li { margin: 2px 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
+.chip.ok { border-color: color-mix(in srgb, var(--c) 55%, transparent); color: var(--ink); }
+.open { margin-top: auto; align-self: flex-start; display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 9px; background: var(--c); color: #fff; font-weight: 700; text-decoration: none; }
+.open:hover { filter: brightness(1.08); }
+.open:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.note { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+.note h3 { margin: 0 0 8px; font-size: 15px; }
+.note ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 14px; }
+.note li { margin: 3px 0; }
+.note b { color: var(--ink); }
+.warn { display: none; border-left: 4px solid var(--a2); background: var(--card); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.warn.show { display: block; }
+footer { color: var(--ink-2); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>動作分析アプリ</h1>
+    <p>スマホで撮った動画を、マーカーを貼らずに分析・比較するためのアプリです。目的に合うものを選んでください。インストールは不要で、ブラウザで開くだけで使えます。</p>
+  </header>
+
+  <div class="warn" id="phoneWarn">スマホで開いています。MotionLab・LongJumpLab・SprintLab は PC での利用をおすすめします（処理が重く、指では点を正確に打ちにくいため）。動画の見比べには MotionCompare が使えます。</div>
+
+  <section class="apps" aria-label="アプリ一覧">
+    <article class="app lab">
+      <div><h2>MotionLab</h2><p class="sub">いろいろな動作の分析（2次元・3次元）</p></div>
+      <ul>
+        <li>関節角度・角速度、体幹の捻転角度</li>
+        <li>指定した部位の変位・速度・加速度</li>
+        <li>ボール等の速度、地面反力の推定、関節トルク</li>
+        <li>スマホ2台で3次元分析、Excel に出力</li>
+      </ul>
+      <div class="meta"><span class="chip ok">PC 推奨</span><span class="chip">較正用の基準物が必要</span></div>
+      <a class="open" href="MotionLab.html">MotionLab を開く</a>
+    </article>
+
+    <article class="app lj">
+      <div><h2>LongJumpLab</h2><p class="sub">走り幅跳びの助走・踏切の分析</p></div>
+      <ul>
+        <li>助走速度、踏切時の水平速度・鉛直速度</li>
+        <li>踏切角度、踏切速度、接地時間</li>
+        <li>重心の高さと軌跡、接地中の沈み込み</li>
+        <li>横から撮った動画1本で分析、Excel に出力</li>
+      </ul>
+      <div class="meta"><span class="chip ok">PC 推奨</span><span class="chip">120fps 以上で撮影</span></div>
+      <a class="open" href="LongJumpLab.html">LongJumpLab を開く</a>
+    </article>
+
+    <article class="app sp">
+      <div><h2>SprintLab</h2><p class="sub">短距離走の疾走速度曲線</p></div>
+      <ul>
+        <li>固定カメラ1台・横からの動画で走者を自動追跡</li>
+        <li>距離–速度・時間–速度の曲線、5 m／10 m の区間タイム</li>
+        <li>最高速度とその地点、合図からの反応時間の目安</li>
+        <li>加速のモデル（vmax・τ）と力–速度プロファイル、試技の比較</li>
+      </ul>
+      <div class="meta"><span class="chip ok">PC 推奨</span><span class="chip">スタートとゴールにコーン</span><span class="chip">三脚で固定</span></div>
+      <a class="open" href="SprintLab.html">SprintLab を開く</a>
+    </article>
+
+    <article class="app cmp">
+      <div><h2>MotionCompare</h2><p class="sub">2つの動作を並べて見比べる</p></div>
+      <ul>
+        <li>2つの動画を左右に並べて表示</li>
+        <li>起点・終点を指定して局面をそろえる</li>
+        <li>コマ送り、任意の3点で角度を測る</li>
+        <li>比較画面の画像と角度の CSV を保存</li>
+      </ul>
+      <div class="meta"><span class="chip ok">PC</span><span class="chip ok">スマホ</span></div>
+      <a class="open" href="MotionCompare.html">MotionCompare を開く</a>
+    </article>
+  </section>
+
+  <section class="note">
+    <h3>使う前に</h3>
+    <ul>
+      <li><b>ブラウザ</b>：PC の Google Chrome または Microsoft Edge を使ってください。</li>
+      <li><b>インターネット</b>：MotionLab と LongJumpLab は、最初の姿勢推定のときに推定エンジンとモデル（合わせて約 25 MB）を読み込みます。SprintLab と MotionCompare はインターネットなしでも動きます。</li>
+      <li><b>動画の扱い</b>：動画はブラウザの中だけで処理され、どこにも送信されません。</li>
+      <li><b>動画の形式</b>：読み込めないときは H.264 の MP4 に変換してください。iPhone は「設定 → カメラ → フォーマット → 互換性優先」で撮影すると確実です。</li>
+      <li><b>使い方</b>：各アプリの「使い方」タブに手順と計算方法があります。</li>
+    </ul>
+  </section>
+
+  <footer>最終更新 2026年11月7日</footer>
+</main>
+<script>
+(() => {
+  const phone = window.matchMedia('(max-width: 700px)').matches && (navigator.maxTouchPoints || 0) > 0;
+  if (phone) document.getElementById('phoneWarn').classList.add('show');
+})();
+</script>
+</body>
+</html>

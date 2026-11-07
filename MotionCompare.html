@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MotionCompare</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* layout: 2つの動画パネルを左右に並べ（スマホでは縦）、その下に共通のコマ送りバー、角度の記録表 */
+  color-scheme: dark;
+  --bg: #101317;
+  --panel: #181c22;
+  --raise: #222830;
+  --line: #2e353f;
+  --ink: #e8ebef;
+  --ink-2: #9ba5b2;
+  --a: #5aa2ff;        /* 動画A */
+  --b: #f3a23b;        /* 動画B */
+  --start: #35c98a;    /* 起点 */
+  --end: #f06464;      /* 終点 */
+  --mid: #b993ff;      /* 中間点 */
+  --ang1: #ffe066; --ang2: #5ee6d3; --ang3: #ff8fc8; --ang4: #ffffff;
+  --font: "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Consolas", monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font); }
+button, input, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.top { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 16px; background: rgba(16,19,23,.94); border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand b { font-size: 17px; letter-spacing: .02em; }
+.brand span { color: var(--ink-2); font-size: 12.5px; }
+.ctrl-group { display: flex; align-items: center; gap: 8px; }
+.lbl { color: var(--ink-2); font-size: 12.5px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; padding: 5px 12px; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--ink); color: var(--bg); font-weight: 700; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--raise); cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: #4a5462; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+.btn.sm { padding: 2px 9px; font-size: 12.5px; }
+.btn.icon { width: 34px; padding: 5px 0; }
+button:focus-visible, input:focus-visible, select:focus-visible, label.btn:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+input[type=number] { width: 72px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-family: var(--mono); }
+select { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+input[type=range] { accent-color: var(--ink); }
+
+main { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 24px; }
+.panes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.panes.single { grid-template-columns: 1fr; }
+@media (max-width: 860px) { .panes { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.pane { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.pane.focus { border-color: var(--pc); box-shadow: 0 0 0 1px var(--pc); }
+.pane[data-k=a] { --pc: var(--a); }
+.pane[data-k=b] { --pc: var(--b); }
+.pane-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.tag { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--pc); color: #0b0d10; font-weight: 700; }
+.fname { flex: 1; min-width: 80px; color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); font-size: 12.5px; }
+.stage { position: relative; height: clamp(240px, 50vh, 620px); background: #0b0d10; touch-action: none; }
+.panes.single .stage { height: clamp(280px, 66vh, 860px); }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center; color: var(--ink-2); padding: 16px; }
+.empty b { color: var(--ink); font-size: 15px; }
+.stage.drop { outline: 2px dashed var(--pc); outline-offset: -8px; }
+.hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: rgba(10,12,15,.88); color: var(--ink); border: 1px solid var(--line); padding: 4px 12px; border-radius: 999px; font-size: 12.5px; pointer-events: none; white-space: nowrap; }
+
+.pane-tl { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.row input[type=range] { flex: 1; min-width: 120px; }
+.finfo { font-size: 12.5px; color: var(--ink-2); min-width: 150px; text-align: right; }
+.keybar { position: relative; height: 10px; margin: 0 2px; border-radius: 5px; background: var(--raise); }
+.keybar .zone { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--pc) 35%, transparent); border-radius: 5px; }
+.keybar .mk { position: absolute; top: -3px; width: 3px; height: 16px; border-radius: 2px; transform: translateX(-1px); }
+.keybar .cur { position: absolute; top: -4px; width: 2px; height: 18px; background: var(--ink); transform: translateX(-1px); }
+.keys { font-size: 12.5px; }
+.key { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--raise); cursor: pointer; white-space: nowrap; }
+.key::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--kc); }
+.key.start { --kc: var(--start); } .key.end { --kc: var(--end); } .key.mid { --kc: var(--mid); }
+.kval { min-width: 44px; color: var(--ink); }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px 1px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--mid) 60%, transparent); font-size: 12px; }
+.chip button { border: 0; background: transparent; color: var(--ink-2); cursor: pointer; padding: 0 4px; }
+
+.common { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.common h2, .angles h2, .help summary { font-size: 13.5px; margin: 0; letter-spacing: .03em; }
+.common .row input[type=range] { min-width: 200px; }
+.cinfo { font-size: 13px; min-width: 260px; }
+.note { color: var(--ink-2); font-size: 12.5px; margin: 0; }
+.note.warn { color: var(--b); }
+
+.angles { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.angles label { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 12.5px; cursor: pointer; }
+.tbl-wrap { overflow-x: auto; max-height: 300px; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 5px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--raise); color: var(--ink-2); font-weight: 500; }
+td:first-child, th:first-child { text-align: left; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--raise); }
+tbody tr.now td { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+td.big { font-weight: 700; font-size: 14px; }
+.ptag { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 5px; color: #0b0d10; font-weight: 700; font-size: 11px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.empty-row td { text-align: center; color: var(--ink-2); cursor: default; }
+
+.help { padding: 10px 14px; }
+.help summary { cursor: pointer; }
+.help ol, .help ul { margin: 8px 0; padding-left: 20px; color: var(--ink-2); font-size: 13px; }
+.help li { margin: 3px 0; }
+.help b { color: var(--ink); }
+kbd { font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--raise); color: var(--ink); }
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; max-width: 90vw; }
+#toast.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+@media (max-width: 560px) { .top { position: static; padding: 8px 12px; gap: 8px 12px; } .ctrl-group .lbl { display: none; } .seg button { padding: 5px 9px; } main { padding: 10px 12px 20px; } .brand span { display: none; } .finfo, .cinfo { min-width: 0; text-align: left; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><b>MotionCompare</b><span>2つの動作を並べて見比べる</span></div>
+  <div class="ctrl-group"><span class="lbl">表示</span>
+    <div class="seg" id="layoutSeg" role="group" aria-label="表示">
+      <button data-layout="dual" class="on">2画面</button><button data-layout="a">Aのみ</button><button data-layout="b">Bのみ</button>
+    </div>
+  </div>
+  <div class="ctrl-group"><span class="lbl">合わせ方</span>
+    <div class="seg" id="linkSeg" role="group" aria-label="合わせ方">
+      <button data-link="none" class="on">連動なし</button><button data-link="time">起点で合わせる</button><button data-link="phase">局面で合わせる</button>
+    </div>
+  </div>
+  <button class="btn" id="snapBtn">画面を画像で保存</button>
+</header>
+
+<main>
+  <section class="panes" id="panes"></section>
+
+  <section class="card common" id="common">
+    <div class="row">
+      <h2>共通コマ送り</h2>
+      <span class="note" id="cMode">連動なし：両方の動画を1コマずつ同時に動かします</span>
+    </div>
+    <div class="row">
+      <button class="btn icon" id="cFirst" title="先頭（起点）へ">⏮</button>
+      <button class="btn icon" id="cPrev10" title="10コマ戻る (Shift+←)">«</button>
+      <button class="btn icon" id="cPrev" title="1コマ戻る (←)">‹</button>
+      <button class="btn icon" id="cPlay" title="再生 / 停止 (Space)">▶</button>
+      <button class="btn icon" id="cNext" title="1コマ進む (→)">›</button>
+      <button class="btn icon" id="cNext10" title="10コマ進む (Shift+→)">»</button>
+      <button class="btn icon" id="cLast" title="最後（終点）へ">⏭</button>
+      <input type="range" id="cSlider" min="0" max="1000" value="0" aria-label="共通の位置" disabled>
+      <span class="cinfo mono" id="cInfo">—</span>
+      <label class="mini" for="cSpeed">再生速度 <select id="cSpeed"><option value="0.1">0.1×</option><option value="0.25">0.25×</option><option value="0.5" selected>0.5×</option><option value="1">1×</option></select></label>
+    </div>
+    <p class="note" id="cNote"></p>
+  </section>
+
+  <section class="card angles" id="angles">
+    <div class="row">
+      <h2>角度（任意の3点）</h2>
+      <button class="btn" id="angMode">3点で角度を測る：OFF</button>
+      <button class="btn" id="angNext" title="このフレームの角度を次のフレームへコピーして1コマ進む">次のフレームへ引き継ぐ</button>
+      <button class="btn" id="angClear">このフレームの角度を消す</button>
+      <label for="angGhost"><input type="checkbox" id="angGhost"> 他のフレームの測定も薄く表示</label>
+      <span style="flex:1"></span>
+      <button class="btn" id="angCsv">CSVを保存</button>
+      <button class="btn" id="angCopy">表をコピー</button>
+    </div>
+    <p class="note">ON にして、<b>1点目 → 頂点（角度を測る関節）→ 3点目</b> の順にクリックします。点はドラッグで動かせます。測定はそのフレームに記録され、下の表に並びます（行をクリックするとそのフレームへ移動）。</p>
+    <div class="tbl-wrap"><table id="angTable"></table></div>
+  </section>
+
+  <details class="card help" open>
+    <summary>使い方</summary>
+    <ol>
+      <li><b>動画を読み込む</b>：A・B それぞれ「動画を選ぶ」か、画面に動画をドラッグします。fps は自動で入ります（スロー動画は撮影時の fps に直します）。</li>
+      <li><b>起点と終点を決める</b>：各動画をコマ送りし、局面の始まりで「起点＝現在」、終わりで「終点＝現在」を押します。途中の区切り（接地・リリースなど）は「＋中間点」で追加できます。</li>
+      <li><b>合わせ方を選ぶ</b>：「起点で合わせる」は起点からの経過時間をそろえます。「局面で合わせる」は起点を0%・終点を100%として、動作の長さが違っても同じ割合の場面を並べます（中間点が同じ数あれば、その点もそろえます）。</li>
+      <li><b>見比べる</b>：共通コマ送りで両方を同時に動かします。片方だけ動かしたいときは、その動画の下のボタンを使います。</li>
+      <li><b>角度を測る</b>：「Aのみ」「Bのみ」で大きく表示し、「3点で角度を測る」を ON にして3点をクリックします。「次のフレームへ引き継ぐ」で同じ測定を次のコマへ移し、点を直していくと角度の変化を記録できます。</li>
+      <li><b>保存</b>：「画面を画像で保存」で並べた画面を PNG に、「CSVを保存」で角度の記録を Excel で開ける CSV にします。</li>
+    </ol>
+    <ul>
+      <li>キー操作：<kbd>←</kbd> <kbd>→</kbd> 1コマ、<kbd>Shift</kbd>＋<kbd>←</kbd> <kbd>→</kbd> 10コマ、<kbd>Space</kbd> 再生・停止、<kbd>Esc</kbd> 角度の入力を取り消し。連動中は両方、連動なしでは選択中（枠が光っている）の動画が動きます。</li>
+      <li>画面の上でホイールすると拡大、拡大中はドラッグで移動、<b>⤢</b> で全体表示に戻ります。<b>⇋</b> で左右反転（右利きと左利きの比較など）。</li>
+      <li>動画はこのブラウザの中だけで再生され、どこにも送信されません。</li>
+    </ul>
+  </details>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ANG_COLORS = () => ['--ang1', '--ang2', '--ang3', '--ang4'].map(cssv);
+function toast(msg, ms = 2600) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms); }
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k === 'style') e.style.cssText = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids) if (c != null) e.append(c);
+  return e;
+}
+const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; };
+
+/* ---------- 保存（artifact の downloads → 通常ダウンロード） ---------- */
+let dlP = null;
+const getDl = () => { if (!window.claude || typeof window.claude.use !== 'function') return Promise.resolve(null); if (!dlP) dlP = Promise.resolve().then(() => window.claude.use('downloads')).catch(() => null); return dlP; };
+async function saveFile(name, blob) {
+  const dl = await getDl();
+  if (dl) {
+    try { await dl.save({ filename: name, data: blob }); toast(`保存しました：${name}`); return; }
+    catch (e) {
+      if (e && e.code === 'declined') { toast('保存をキャンセルしました'); return; }
+      if (e && e.code === 'rate_limited') { toast('保存の確認が開いています。少し待ってからもう一度押してください'); return; }
+    }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
+  toast(`保存しました：${name}`);
+}
+
+/* ---------- MP4/MOV ヘッダから fps とフレーム数 ---------- */
+async function parseMp4(file) {
+  const rd = async (o, l) => new DataView(await file.slice(o, o + l).arrayBuffer());
+  const str = (dv, o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+  let off = 0, moov = null;
+  for (let g = 0; off < file.size && g < 1000; g++) {
+    const h = await rd(off, 16); if (h.byteLength < 8) break;
+    let size = h.getUint32(0); const type = str(h, 4); let hdr = 8;
+    if (size === 1) { size = Number(h.getBigUint64(8)); hdr = 16; } else if (size === 0) size = file.size - off;
+    if (size < 8) break;
+    if (type === 'moov') { if (size > 200e6) return null; moov = await rd(off + hdr, size - hdr); break; }
+    off += size;
+  }
+  if (!moov) return null;
+  const boxes = (dv, s, e) => { const out = []; let p = s; while (p + 8 <= e) { let size = dv.getUint32(p); const type = str(dv, p + 4); let hdr = 8; if (size === 1) { size = Number(dv.getBigUint64(p + 8)); hdr = 16; } else if (size === 0) size = e - p; if (size < 8 || p + size > e) break; out.push({ type, start: p + hdr, end: p + size }); p += size; } return out; };
+  const find = (dv, b, path) => { let cur = [b]; for (const t of path) { const nx = []; for (const c of cur) nx.push(...boxes(dv, c.start, c.end).filter(x => x.type === t)); cur = nx; if (!cur.length) return null; } return cur[0]; };
+  for (const trak of boxes(moov, 0, moov.byteLength).filter(b => b.type === 'trak')) {
+    const hdlr = find(moov, trak, ['mdia', 'hdlr']); if (!hdlr || str(moov, hdlr.start + 8) !== 'vide') continue;
+    const mdhd = find(moov, trak, ['mdia', 'mdhd']); if (!mdhd) continue;
+    const ts = moov.getUint32(mdhd.start + (moov.getUint8(mdhd.start) === 1 ? 20 : 12));
+    const stts = find(moov, trak, ['mdia', 'minf', 'stbl', 'stts']); if (!stts) continue;
+    const n = moov.getUint32(stts.start + 4); let total = 0, best = 0, bc = 0;
+    for (let i = 0; i < n; i++) { const c = moov.getUint32(stts.start + 8 + i * 8), d = moov.getUint32(stts.start + 12 + i * 8); total += c; if (c > bc) { bc = c; best = d; } }
+    if (best && ts) return { fps: Math.round(ts / best * 1000) / 1000, frames: total };
+  }
+  return null;
+}
+
+/* ---------- 状態 ---------- */
+const mkPane = (key, label, idx) => ({ key, label, idx, video: null, url: null, name: '', w: 0, h: 0, dur: 0, fps: 30, n: 0, frame: 0, shown: -1,
+  mirror: false, zoom: 1, panX: 0, panY: 0, tf: null, keys: { start: null, end: null, mids: [] }, q: { busy: false, want: null }, playing: false, locked: false });
+const P = [mkPane('a', 'A', 0), mkPane('b', 'B', 1)];
+const S = { layout: 'dual', link: 'none', focus: 0, angleMode: false, pending: null, angles: [], seq: 1, ghost: false, ci: 0, axis: null, playing: false, drag: null, pointer: null };
+const pc = p => cssv(p.idx === 0 ? '--a' : '--b');
+const loaded = () => P.filter(p => p.n > 0);
+const visible = () => S.layout === 'dual' ? P : P.filter(p => p.key === S.layout);
+
+/* ---------- パネル生成 ---------- */
+const hiddenBox = el('div', { style: 'position:fixed;left:-10000px;top:0;width:4px;height:4px;overflow:hidden;opacity:0;pointer-events:none' });
+document.body.append(hiddenBox);
+function buildPane(p) {
+  const k = p.key, id = s => `${k}-${s}`;
+  const art = el('article', { class: 'pane', 'data-k': k, id: id('pane') },
+    el('div', { class: 'pane-bar' },
+      el('span', { class: 'tag', text: p.label }),
+      el('label', { class: 'btn', for: id('file') }, '動画を選ぶ', el('input', { type: 'file', id: id('file'), accept: 'video/*,.mov,.mp4,.m4v,.webm', hidden: true })),
+      el('span', { class: 'fname', id: id('name'), text: '未読込' }),
+      el('label', { class: 'mini', for: id('fps') }, 'fps', el('input', { type: 'number', id: id('fps'), step: '0.01', min: '1', value: '30' })),
+      el('button', { class: 'btn icon', id: id('mirror'), title: '左右反転', 'aria-pressed': 'false', text: '⇋' }),
+      el('button', { class: 'btn icon', id: id('fit'), title: '全体表示に戻す', text: '⤢' })),
+    el('div', { class: 'stage', id: id('stage') },
+      el('canvas', { id: id('cv') }),
+      el('div', { class: 'empty', id: id('empty') }, el('b', { text: `動画 ${p.label} を読み込む` }), el('span', { text: '上の「動画を選ぶ」を押すか、ここに動画をドラッグ' })),
+      el('div', { class: 'hint', id: id('hint'), hidden: true })),
+    el('div', { class: 'pane-tl' },
+      el('div', { class: 'row' },
+        el('button', { class: 'btn icon', id: id('p10'), title: '10コマ戻る', text: '«' }),
+        el('button', { class: 'btn icon', id: id('p1'), title: '1コマ戻る', text: '‹' }),
+        el('button', { class: 'btn icon', id: id('play'), title: 'この動画だけ再生 / 停止', text: '▶' }),
+        el('button', { class: 'btn icon', id: id('n1'), title: '1コマ進む', text: '›' }),
+        el('button', { class: 'btn icon', id: id('n10'), title: '10コマ進む', text: '»' }),
+        el('input', { type: 'range', id: id('slider'), min: '0', max: '0', value: '0', 'aria-label': `動画${p.label}のフレーム` }),
+        el('span', { class: 'finfo mono', id: id('info'), text: '—' })),
+      el('div', { class: 'keybar', id: id('keybar') }),
+      el('div', { class: 'row keys' },
+        el('button', { class: 'key start', id: id('setStart'), text: '起点＝現在' }), el('span', { class: 'kval mono', id: id('start'), text: '—' }),
+        el('button', { class: 'btn sm', id: id('goStart'), text: '移動' }),
+        el('button', { class: 'key end', id: id('setEnd'), text: '終点＝現在' }), el('span', { class: 'kval mono', id: id('end'), text: '—' }),
+        el('button', { class: 'btn sm', id: id('goEnd'), text: '移動' }),
+        el('button', { class: 'key mid', id: id('addMid'), text: '＋中間点' }), el('span', { class: 'row', id: id('mids') }))));
+  $('panes').append(art);
+  p.cv = $(id('cv'));
+  p.$ = s => $(id(s));
+  bindPane(p);
+}
+
+/* ---------- 動画読み込み ---------- */
+async function loadVideo(p, file) {
+  if (!file) return;
+  if (p.playing) stopPanePlay(p);
+  if (p.video) p.video.remove();
+  if (p.url) URL.revokeObjectURL(p.url);
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'auto'; v.setAttribute('playsinline', '');
+  hiddenBox.append(v);
+  p.url = URL.createObjectURL(file); v.src = p.url;
+  try {
+    await new Promise((res, rej) => {
+      v.addEventListener('loadeddata', res, { once: true });
+      v.addEventListener('error', () => rej(new Error('この動画は再生できません。H.264 の MP4 に変換してください')), { once: true });
+      setTimeout(() => rej(new Error('動画の読み込みがタイムアウトしました')), 30000);
+    });
+  } catch (e) { toast(e.message, 6000); v.remove(); return; }
+  Object.assign(p, { video: v, name: file.name, w: v.videoWidth, h: v.videoHeight, dur: v.duration, shown: -1, zoom: 1, panX: 0, panY: 0, keys: { start: null, end: null, mids: [] }, frame: 0 });
+  S.angles = S.angles.filter(a => a.pane !== p.idx);
+  let meta = null; try { meta = await parseMp4(file); } catch (e) { meta = null; }
+  if (meta && meta.fps > 0) { p.fps = meta.fps; p.n = meta.frames || Math.floor(p.dur * p.fps + 1e-3); }
+  else { p.fps = await detectFps(v) || 30; p.n = Math.max(1, Math.floor(p.dur * p.fps + 1e-3)); }
+  p.$('name').textContent = `${file.name} ・ ${p.w}×${p.h} ・ ${p.n}コマ`;
+  p.$('name').title = file.name;
+  p.$('fps').value = p.fps;
+  p.$('empty').hidden = true;
+  setFocus(p.idx);
+  renderPane(p); renderTable(); refreshAxis(false);
+  await showFrame(p, 0);
+  toast(`動画${p.label}：${p.fps} fps・${p.n} コマ。fps が撮影時と違う場合（スロー動画など）は直してください`, 5000);
+}
+async function detectFps(v) {
+  if (!('requestVideoFrameCallback' in v)) return null;
+  const meas = (rate, ms) => new Promise(res => { const t = []; let stop = false; const cb = (now, m) => { t.push(m.mediaTime); if (!stop) v.requestVideoFrameCallback(cb); }; v.requestVideoFrameCallback(cb); v.playbackRate = rate; v.play().catch(() => { stop = true; res(t); }); setTimeout(() => { stop = true; v.pause(); res(t); }, ms); });
+  const est = t => { const d = []; for (let i = 1; i < t.length; i++) { const x = t[i] - t[i - 1]; if (x > 1e-4) d.push(x); } if (d.length < 4) return null; d.sort((a, b) => a - b); return 1 / d[Math.floor(d.length * 0.2)]; };
+  let f = est(await meas(1, 700)); if (f && f > 70) f = est(await meas(0.2, 900)) || f;
+  v.pause(); v.playbackRate = 1; v.currentTime = 0;
+  if (!f) return null;
+  const list = [15, 23.976, 24, 25, 29.97, 30, 50, 59.94, 60, 119.88, 120, 239.76, 240];
+  let best = null, bd = 0.012; for (const c of list) { const d = Math.abs(f - c) / c; if (d < bd) { bd = d; best = c; } }
+  return best ?? Math.round(f * 100) / 100;
+}
+
+/* ---------- シークと描画 ---------- */
+function seekRaw(p, j) {
+  return new Promise(resolve => {
+    const v = p.video; if (!v) return resolve();
+    const t = Math.min((j + 0.5) / p.fps, Math.max(0, p.dur - 0.0005));
+    let seeked = false, framed = !('requestVideoFrameCallback' in v), done = false;
+    const fin = force => { if (done) return; if (force || (seeked && framed)) { done = true; v.removeEventListener('seeked', onS); p.shown = j; resolve(); } };
+    const onS = () => { seeked = true; if (!framed) setTimeout(() => { framed = true; fin(); }, 90); fin(); };
+    v.addEventListener('seeked', onS);
+    if (!framed) v.requestVideoFrameCallback(() => { framed = true; fin(); });
+    v.currentTime = t;
+    setTimeout(() => fin(true), 4000);
+  });
+}
+async function showFrame(p, j) {
+  if (!p.n) return;
+  j = clamp(Math.round(j), 0, p.n - 1);
+  p.frame = j; renderPaneTl(p);
+  if (!p.video || p.playing) { drawPane(p); return; }
+  p.q.want = j;
+  if (p.q.busy) return;
+  p.q.busy = true;
+  while (p.q.want !== null) { const t = p.q.want; p.q.want = null; if (p.shown !== t) await seekRaw(p, t); drawPane(p); }
+  p.q.busy = false;
+  highlightRows();
+}
+const T = (p, u, v) => [p.tf.ox + (p.mirror ? p.w - u : u) * p.tf.s, p.tf.oy + v * p.tf.s];
+const inv = (p, x, y) => { let u = (x - p.tf.ox) / p.tf.s; if (p.mirror) u = p.w - u; return [u, (y - p.tf.oy) / p.tf.s]; };
+function angleOf(pts) {
+  const [a, b, c] = pts; const u = [a[0] - b[0], a[1] - b[1]], v = [c[0] - b[0], c[1] - b[1]];
+  const nu = Math.hypot(...u), nv = Math.hypot(...v); if (!nu || !nv) return NaN;
+  return Math.acos(clamp((u[0] * v[0] + u[1] * v[1]) / (nu * nv), -1, 1)) * 180 / Math.PI;
+}
+const phaseOf = (p, f) => (p.keys.start != null && p.keys.end != null && p.keys.end > p.keys.start) ? (f - p.keys.start) / (p.keys.end - p.keys.start) * 100 : null;
+
+function drawPane(p) {
+  const cv = p.cv; if (!cv || !cv.clientWidth) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#0b0d10'; ctx.fillRect(0, 0, W, H);
+  if (!p.w) { p.tf = null; return; }
+  const s = Math.min(W / p.w, H / p.h) * p.zoom, ox = (W - p.w * s) / 2 + p.panX, oy = (H - p.h * s) / 2 + p.panY;
+  p.tf = { s, ox, oy, W, H, dpr };
+  if (p.video && p.video.readyState >= 2) {
+    if (p.mirror) { ctx.save(); ctx.translate(ox + p.w * s, oy); ctx.scale(-1, 1); ctx.drawImage(p.video, 0, 0, p.w * s, p.h * s); ctx.restore(); }
+    else ctx.drawImage(p.video, ox, oy, p.w * s, p.h * s);
+  }
+  const cols = ANG_COLORS();
+  if (S.ghost) S.angles.filter(a => a.pane === p.idx && a.frame !== p.frame).forEach(a => drawAngle(ctx, p, a, cols[a.color % cols.length], 0.28, false));
+  S.angles.filter(a => a.pane === p.idx && a.frame === p.frame).forEach(a => drawAngle(ctx, p, a, cols[a.color % cols.length], 1, true));
+  const pd = S.pending;
+  if (pd && pd.pane === p.idx && pd.frame === p.frame) {
+    const c = cols[S.seq % cols.length];
+    ctx.lineWidth = 2; ctx.strokeStyle = c;
+    if (pd.pts.length === 2) { const a = T(p, ...pd.pts[0]), b = T(p, ...pd.pts[1]); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); }
+    pd.pts.forEach((q, i) => dot(ctx, ...T(p, ...q), c, i === 1 ? 6 : 5));
+  }
+  // バッジ
+  const ph = phaseOf(p, p.frame);
+  const txt = `${p.label}  F ${p.frame}  ${(p.frame / p.fps).toFixed(3)} s` + (ph != null ? `  局面 ${ph.toFixed(1)}%` : '');
+  ctx.font = `600 13px ${cssv('--mono')}`;
+  const tw = ctx.measureText(txt).width;
+  ctx.fillStyle = 'rgba(10,12,15,.82)'; roundRect(ctx, 8, 8, tw + 20, 26, 6); ctx.fill();
+  ctx.fillStyle = pc(p); ctx.fillRect(8, 8, 4, 26);
+  ctx.fillStyle = '#e8ebef'; ctx.textBaseline = 'middle'; ctx.fillText(txt, 18, 21.5);
+  const kname = p.frame === p.keys.start ? ['起点', cssv('--start')] : p.frame === p.keys.end ? ['終点', cssv('--end')] : p.keys.mids.includes(p.frame) ? [`中間点${p.keys.mids.indexOf(p.frame) + 1}`, cssv('--mid')] : null;
+  if (kname) { ctx.font = `700 13px ${cssv('--font')}`; const w2 = ctx.measureText(kname[0]).width; ctx.fillStyle = kname[1]; roundRect(ctx, 8, 40, w2 + 16, 24, 6); ctx.fill(); ctx.fillStyle = '#0b0d10'; ctx.fillText(kname[0], 16, 52.5); }
+  if (p.mirror) { ctx.font = `12px ${cssv('--font')}`; ctx.fillStyle = 'rgba(232,235,239,.75)'; ctx.textAlign = 'right'; ctx.fillText('左右反転', W - 10, 20); ctx.textAlign = 'left'; }
+  drawLoupe(ctx, p);
+}
+function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function dot(ctx, x, y, c, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = '#0b0d10'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = c; ctx.stroke(); }
+function drawAngle(ctx, p, a, c, alpha, label) {
+  const [A, V, B] = a.pts.map(q => T(p, q[0], q[1]));
+  ctx.save(); ctx.globalAlpha = alpha; ctx.lineCap = 'round';
+  for (const [w, col] of [[5, 'rgba(0,0,0,.65)'], [2.5, c]]) { ctx.lineWidth = w; ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...V); ctx.lineTo(...B); ctx.stroke(); }
+  const a1 = Math.atan2(A[1] - V[1], A[0] - V[0]), a2 = Math.atan2(B[1] - V[1], B[0] - V[0]);
+  let d = a2 - a1; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  const r = 26; ctx.beginPath(); ctx.moveTo(...V); ctx.arc(V[0], V[1], r, a1, a1 + d, d < 0); ctx.closePath();
+  ctx.fillStyle = c; ctx.globalAlpha = alpha * 0.22; ctx.fill(); ctx.globalAlpha = alpha;
+  ctx.lineWidth = 1.5; ctx.strokeStyle = c; ctx.beginPath(); ctx.arc(V[0], V[1], r, a1, a1 + d, d < 0); ctx.stroke();
+  [A, B].forEach(q => dot(ctx, ...q, c, 5)); dot(ctx, ...V, c, 6);
+  if (label) {
+    const deg = angleOf(a.pts); const txt = `${deg.toFixed(1)}°`;
+    const m = a1 + d / 2; let lx = V[0] - Math.cos(m) * (r + 30), ly = V[1] - Math.sin(m) * (r + 30);
+    ctx.font = `700 15px ${cssv('--mono')}`; const tw = ctx.measureText(txt).width;
+    lx = clamp(lx, tw / 2 + 6, p.tf.W - tw / 2 - 6); ly = clamp(ly, 16, p.tf.H - 16);
+    ctx.fillStyle = 'rgba(10,12,15,.85)'; roundRect(ctx, lx - tw / 2 - 7, ly - 13, tw + 14, 26, 6); ctx.fill();
+    ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, lx, ly + 1); ctx.textAlign = 'left';
+  }
+  ctx.restore();
+}
+function drawLoupe(ctx, p) {
+  if (!S.angleMode || !S.pointer || S.pointer.idx !== p.idx || !p.tf) return;
+  const { x, y } = S.pointer, dpr = p.tf.dpr, src = 36, dst = 144, m = 8;
+  const dx = x > p.tf.W - dst - 30 && y < dst + 30 ? m : p.tf.W - dst - m;
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(p.cv, (x - src / 2) * dpr, (y - src / 2) * dpr, src * dpr, src * dpr, dx, m, dst, dst);
+  ctx.strokeStyle = '#e8ebef'; ctx.lineWidth = 2; ctx.strokeRect(dx, m, dst, dst);
+  ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(dx + dst / 2, m + 10); ctx.lineTo(dx + dst / 2, m + dst - 10); ctx.moveTo(dx + 10, m + dst / 2); ctx.lineTo(dx + dst - 10, m + dst / 2); ctx.stroke();
+  ctx.restore();
+}
+
+/* ---------- パネル UI ---------- */
+function renderPaneTl(p) {
+  const s = p.$('slider'); s.max = Math.max(0, p.n - 1); s.value = p.frame;
+  const ph = phaseOf(p, p.frame);
+  p.$('info').textContent = p.n ? `F ${p.frame} / ${p.n - 1}  ${(p.frame / p.fps).toFixed(3)} s` + (ph != null ? `  ${ph.toFixed(1)}%` : '') : '—';
+  const bar = p.$('keybar'); bar.innerHTML = '';
+  if (!p.n) return;
+  const X = f => `${(f / Math.max(1, p.n - 1)) * 100}%`;
+  const k = p.keys;
+  if (k.start != null && k.end != null) bar.append(el('div', { class: 'zone', style: `left:${X(Math.min(k.start, k.end))};width:${(Math.abs(k.end - k.start) / Math.max(1, p.n - 1)) * 100}%` }));
+  if (k.start != null) bar.append(el('div', { class: 'mk', style: `left:${X(k.start)};background:var(--start)`, title: `起点 F${k.start}` }));
+  if (k.end != null) bar.append(el('div', { class: 'mk', style: `left:${X(k.end)};background:var(--end)`, title: `終点 F${k.end}` }));
+  k.mids.forEach((f, i) => bar.append(el('div', { class: 'mk', style: `left:${X(f)};background:var(--mid)`, title: `中間点${i + 1} F${f}` })));
+  bar.append(el('div', { class: 'cur', style: `left:${X(p.frame)}` }));
+}
+function renderPane(p) {
+  p.$('start').textContent = p.keys.start ?? '—';
+  p.$('end').textContent = p.keys.end ?? '—';
+  const mids = p.$('mids'); mids.innerHTML = '';
+  p.keys.mids.forEach((f, i) => mids.append(el('span', { class: 'chip mono' }, `中間${i + 1} F${f}`,
+    el('button', { title: 'この中間点へ移動', text: '→', onclick: () => showFrame(p, f) }),
+    el('button', { title: '削除', text: '×', onclick: () => { p.keys.mids.splice(i, 1); keysChanged(p); } }))));
+  p.$('mirror').classList.toggle('on', p.mirror); p.$('mirror').setAttribute('aria-pressed', String(p.mirror));
+  renderPaneTl(p);
+}
+function keysChanged(p) { renderPane(p); drawPane(p); renderTable(); refreshAxis(true); }
+function setFocus(i) { S.focus = i; P.forEach(p => { const a = p.$('pane'); if (a) a.classList.toggle('focus', p.idx === i && S.layout === 'dual'); }); }
+
+let panePlayCb = null;
+function stopPanePlay(p) { if (!p.playing) return; p.playing = false; p.video.pause(); p.$('play').textContent = '▶'; showFrame(p, p.frame); }
+function startPanePlay(p) {
+  if (!p.video || p.playing) return;
+  if (S.playing) stopCommon();
+  p.playing = true; p.$('play').textContent = '❚❚';
+  const v = p.video; v.playbackRate = parseFloat($('cSpeed').value);
+  if (p.frame >= p.n - 1) v.currentTime = 0.5 / p.fps;
+  const rv = 'requestVideoFrameCallback' in v;
+  const tick = (now, m) => {
+    if (!p.playing) return;
+    p.frame = clamp(Math.round(m ? m.mediaTime * p.fps : v.currentTime * p.fps - 0.5), 0, p.n - 1); p.shown = -1;
+    renderPaneTl(p); drawPane(p);
+    if (v.ended || v.paused) { stopPanePlay(p); return; }
+    rv ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(() => tick());
+  };
+  rv ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(() => tick());
+  v.play().catch(() => stopPanePlay(p));
+}
+
+function bindPane(p) {
+  p.$('file').addEventListener('change', e => { loadVideo(p, e.target.files[0]); e.target.value = ''; });
+  const st = p.$('stage');
+  st.addEventListener('dragover', e => { e.preventDefault(); st.classList.add('drop'); });
+  st.addEventListener('dragleave', () => st.classList.remove('drop'));
+  st.addEventListener('drop', e => { e.preventDefault(); st.classList.remove('drop'); const f = e.dataTransfer.files[0]; if (f) loadVideo(p, f); });
+  p.$('fps').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!(v > 0)) return; p.fps = v; if (p.dur) p.n = Math.max(1, Math.floor(p.dur * v + 1e-3)); renderPane(p); refreshAxis(true); showFrame(p, p.frame); });
+  p.$('mirror').addEventListener('click', () => { p.mirror = !p.mirror; renderPane(p); drawPane(p); });
+  p.$('fit').addEventListener('click', () => { p.zoom = 1; p.panX = p.panY = 0; drawPane(p); });
+  const step = d => { setFocus(p.idx); if (p.playing) stopPanePlay(p); showFrame(p, p.frame + d); };
+  p.$('p10').addEventListener('click', () => step(-10)); p.$('p1').addEventListener('click', () => step(-1));
+  p.$('n1').addEventListener('click', () => step(1)); p.$('n10').addEventListener('click', () => step(10));
+  p.$('play').addEventListener('click', () => { setFocus(p.idx); p.playing ? stopPanePlay(p) : startPanePlay(p); });
+  p.$('slider').addEventListener('input', e => { setFocus(p.idx); if (p.playing) stopPanePlay(p); showFrame(p, parseInt(e.target.value)); });
+  p.$('setStart').addEventListener('click', () => { if (!p.n) return; p.keys.start = p.frame; if (p.keys.end != null && p.keys.end <= p.frame) { p.keys.end = null; toast('終点が起点より前だったので、終点を消しました'); } p.keys.mids = p.keys.mids.filter(f => f > p.frame); keysChanged(p); });
+  p.$('setEnd').addEventListener('click', () => { if (!p.n) return; if (p.keys.start != null && p.frame <= p.keys.start) { toast('終点は起点より後のフレームにしてください'); return; } p.keys.end = p.frame; p.keys.mids = p.keys.mids.filter(f => f < p.frame); keysChanged(p); });
+  p.$('goStart').addEventListener('click', () => { if (p.keys.start != null) { setFocus(p.idx); showFrame(p, p.keys.start); } });
+  p.$('goEnd').addEventListener('click', () => { if (p.keys.end != null) { setFocus(p.idx); showFrame(p, p.keys.end); } });
+  p.$('addMid').addEventListener('click', () => {
+    const k = p.keys, f = p.frame;
+    if (k.start == null || k.end == null) { toast('先に起点と終点を設定してください'); return; }
+    if (f <= k.start || f >= k.end) { toast('中間点は起点と終点の間のフレームで追加してください'); return; }
+    if (k.mids.includes(f)) return;
+    k.mids.push(f); k.mids.sort((a, b) => a - b); keysChanged(p);
+  });
+
+  const cv = p.cv;
+  new ResizeObserver(() => drawPane(p)).observe(cv);
+  const local = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('pointerdown', e => {
+    setFocus(p.idx);
+    if (!p.tf) return;
+    const [x, y] = local(e); cv.setPointerCapture(e.pointerId);
+    if (e.button === 0) {
+      for (const a of S.angles) {
+        if (a.pane !== p.idx || a.frame !== p.frame) continue;
+        for (let i = 0; i < 3; i++) { const q = T(p, ...a.pts[i]); if (Math.hypot(q[0] - x, q[1] - y) < 13) { S.drag = { type: 'pt', a, i, p }; return; } }
+      }
+      if (S.angleMode) {
+        if (p.playing) stopPanePlay(p);
+        const [u, v] = inv(p, x, y);
+        if (u < 0 || v < 0 || u > p.w || v > p.h) return;
+        if (!S.pending || S.pending.pane !== p.idx || S.pending.frame !== p.frame) S.pending = { pane: p.idx, frame: p.frame, pts: [] };
+        S.pending.pts.push([u, v]);
+        if (S.pending.pts.length === 3) { S.angles.push({ id: S.seq, pane: p.idx, frame: p.frame, pts: S.pending.pts, color: S.seq }); S.seq++; S.pending = null; renderTable(); }
+        updateHints(); drawPane(p); return;
+      }
+    }
+    S.drag = { type: 'pan', p, x, y, panX: p.panX, panY: p.panY };
+  });
+  cv.addEventListener('pointermove', e => {
+    const [x, y] = local(e); S.pointer = { idx: p.idx, x, y };
+    const d = S.drag;
+    if (d && d.type === 'pt') { d.a.pts[d.i] = inv(p, x, y); drawPane(p); updateAngleCell(d.a); return; }
+    if (d && d.type === 'pan') { if (p.zoom > 1) { p.panX = d.panX + x - d.x; p.panY = d.panY + y - d.y; drawPane(p); } return; }
+    if (S.angleMode) drawPane(p);
+  });
+  const end = () => { if (S.drag && S.drag.type === 'pt') renderTable(); S.drag = null; };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  cv.addEventListener('pointerleave', () => { if (S.pointer && S.pointer.idx === p.idx) { S.pointer = null; if (S.angleMode) drawPane(p); } });
+  cv.addEventListener('wheel', e => {
+    if (!p.tf) return; e.preventDefault();
+    const [cx, cy] = local(e); const f = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+    const nz = clamp(p.zoom * f, 1, 20), r = nz / p.zoom, t = p.tf, s0 = t.s / p.zoom;
+    const nox = cx - (cx - t.ox) * r, noy = cy - (cy - t.oy) * r;
+    p.zoom = nz; p.panX = nz === 1 ? 0 : nox - (t.W - p.w * s0 * nz) / 2; p.panY = nz === 1 ? 0 : noy - (t.H - p.h * s0 * nz) / 2;
+    drawPane(p);
+  }, { passive: false });
+}
+
+/* ---------- 共通の軸（合わせ方） ---------- */
+function keyList(p, useMids) { const k = p.keys; return [k.start, ...(useMids ? k.mids : []), k.end]; }
+function buildAxis() {
+  const L = loaded();
+  if (S.link === 'none') return { ok: true, none: true };
+  if (L.length < 2) return { ok: false, msg: '2つの動画を読み込むと連動できます' };
+  if (S.link === 'time') {
+    const miss = L.filter(p => p.keys.start == null);
+    if (miss.length) return { ok: false, msg: `動画${miss.map(p => p.label).join('・')}の起点を設定してください` };
+    const lo = Math.max(...L.map(p => -p.keys.start / p.fps)), hi = Math.min(...L.map(p => (p.n - 1 - p.keys.start) / p.fps));
+    const step = 1 / Math.max(...L.map(p => p.fps));
+    if (!(hi > lo)) return { ok: false, msg: '2つの動画で重なる時間がありません' };
+    return { ok: true, lo, step, M: Math.round((hi - lo) / step), frames: x => L.map(p => p.keys.start + x * p.fps), inverse: (p, f) => (f - p.keys.start) / p.fps };
+  }
+  const miss = L.filter(p => p.keys.start == null || p.keys.end == null);
+  if (miss.length) return { ok: false, msg: `動画${miss.map(p => p.label).join('・')}の起点と終点を設定してください` };
+  const useMids = L.every(p => p.keys.mids.length === L[0].keys.mids.length);
+  const K = L.map(p => keyList(p, useMids)), K0 = K[0], span0 = K0.at(-1) - K0[0];
+  const U = K0.map(f => (f - K0[0]) / span0);
+  const interp = (xs, ys, x) => { for (let i = 0; i < xs.length - 1; i++) if (x <= xs[i + 1] || i === xs.length - 2) { const t = (x - xs.at(i)) / (xs.at(i + 1) - xs.at(i)); return ys.at(i) + t * (ys.at(i + 1) - ys.at(i)); } return ys.at(-1); };
+  const step = 1 / Math.max(...K.map(k => k.at(-1) - k[0]));
+  return { ok: true, phase: true, lo: 0, step, M: Math.round(1 / step), useMids, mids: L[0].keys.mids.length,
+    frames: u => K.map(k => interp(U, k, u)), inverse: (p, f) => interp(K[L.indexOf(p)], U, f), warn: useMids ? '' : '中間点の数が A と B で違うため、中間点は使わず起点と終点だけで合わせています' };
+}
+function refreshAxis(keep) {
+  const ax = buildAxis(); S.axis = ax;
+  const sl = $('cSlider');
+  const modeTxt = { none: '連動なし：両方の動画を1コマずつ同時に動かします', time: '起点で合わせる：起点からの経過時間をそろえて両方を動かします', phase: '局面で合わせる：起点を0%、終点を100%として同じ割合の場面を並べます' };
+  $('cMode').textContent = modeTxt[S.link];
+  const note = $('cNote'); note.className = 'note'; note.textContent = '';
+  if (!ax.ok) { sl.disabled = true; note.className = 'note warn'; note.textContent = ax.msg; $('cInfo').textContent = '—'; return; }
+  if (ax.none) { sl.disabled = true; $('cInfo').textContent = loaded().map(p => `${p.label} F${p.frame}`).join('  ') || '—'; return; }
+  sl.disabled = false; sl.max = ax.M;
+  if (ax.warn) { note.className = 'note warn'; note.textContent = ax.warn; }
+  else if (ax.phase && ax.mids) note.textContent = `中間点 ${ax.mids} 個もそろえています`;
+  // いま見ている動画（選択中）の位置に相手を合わせる
+  const L = loaded(); const ref = L.find(p => p.idx === S.focus) || L[0];
+  const x = ax.inverse(ref, ref.frame);
+  setCommon(Math.round((x - ax.lo) / ax.step));
+}
+function setCommon(i) {
+  const ax = S.axis; if (!ax || !ax.ok || ax.none) return;
+  S.ci = clamp(i, 0, ax.M);
+  const x = ax.lo + S.ci * ax.step; const fr = ax.frames(x);
+  loaded().forEach((p, k) => { if (p.playing) stopPanePlay(p); showFrame(p, fr[k]); });
+  $('cSlider').value = S.ci;
+  const L = loaded();
+  $('cInfo').textContent = (ax.phase ? `局面 ${(x * 100).toFixed(1)}%` : `起点から ${x >= 0 ? '+' : ''}${x.toFixed(3)} s`) + '  ' + L.map((p, k) => `${p.label} F${Math.round(fr[k])}`).join('  ');
+}
+function commonStep(d) {
+  const ax = S.axis;
+  if (ax && ax.ok && !ax.none) { setCommon(S.ci + d); return; }
+  const L = loaded(); if (!L.length) return;
+  L.forEach(p => { if (p.playing) stopPanePlay(p); showFrame(p, p.frame + d); });
+  $('cInfo').textContent = L.map(p => `${p.label} F${clamp(p.frame, 0, p.n - 1)}`).join('  ');
+}
+function commonEdge(end) {
+  const ax = S.axis;
+  if (ax && ax.ok && !ax.none) { setCommon(end ? ax.M : 0); return; }
+  loaded().forEach(p => showFrame(p, end ? (p.keys.end ?? p.n - 1) : (p.keys.start ?? 0)));
+}
+function stopCommon() { S.playing = false; $('cPlay').textContent = '▶'; }
+function playCommon() {
+  const ax = S.axis;
+  if (S.playing) { stopCommon(); return; }
+  if (!ax || !ax.ok || ax.none) {
+    const L = loaded().filter(p => visible().includes(p)); if (!L.length) return;
+    const any = L.some(p => p.playing); L.forEach(p => any ? stopPanePlay(p) : startPanePlay(p)); return;
+  }
+  S.playing = true; $('cPlay').textContent = '❚❚';
+  if (S.ci >= ax.M) setCommon(0);
+  const L = loaded(); const ref = L[0];
+  const unitsPerSec = ax.phase ? 1 / ((ref.keys.end - ref.keys.start) / ref.fps) : 1;
+  let last = performance.now(), acc = 0;
+  const tick = now => {
+    if (!S.playing) return;
+    acc += (now - last) / 1000 * parseFloat($('cSpeed').value) * unitsPerSec / ax.step; last = now;
+    if (!L.some(p => p.q.busy) && acc >= 1) {
+      const n = Math.floor(acc); acc -= n;
+      if (S.ci + n > ax.M) { setCommon(ax.M); stopCommon(); return; }
+      setCommon(S.ci + n);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+/* ---------- 角度の表 ---------- */
+function rowsSorted() { return S.angles.slice().sort((a, b) => a.pane - b.pane || a.frame - b.frame || a.id - b.id); }
+function renderTable() {
+  const t = $('angTable'); t.innerHTML = '';
+  t.append(el('thead', {}, el('tr', {}, ...['動画', '測定', 'フレーム', '時間 (s)', '局面 (%)', '角度 (°)', ''].map(h => el('th', { text: h })))));
+  const tb = el('tbody'); const cols = ANG_COLORS();
+  const rows = rowsSorted();
+  if (!rows.length) tb.append(el('tr', { class: 'empty-row' }, el('td', { colspan: 7, text: 'まだ測定はありません。「3点で角度を測る」を ON にして、画面を3回クリックしてください' })));
+  for (const a of rows) {
+    const p = P[a.pane], ph = phaseOf(p, a.frame);
+    const tr = el('tr', { 'data-id': a.id },
+      el('td', {}, el('span', { class: 'ptag', style: `background:${pc(p)}`, text: p.label })),
+      el('td', {}, el('span', { class: 'sw', style: `background:${cols[a.color % cols.length]}` }), `#${a.id}`),
+      el('td', { class: 'mono', text: a.frame }),
+      el('td', { class: 'mono', text: (a.frame / p.fps).toFixed(3) }),
+      el('td', { class: 'mono', text: ph == null ? '—' : ph.toFixed(1) }),
+      el('td', { class: 'mono big', id: `ang-${a.id}`, text: angleOf(a.pts).toFixed(1) }),
+      el('td', {}, el('button', { class: 'btn sm', text: '削除', onclick: ev => { ev.stopPropagation(); S.angles = S.angles.filter(x => x !== a); renderTable(); drawPane(p); } })));
+    tr.addEventListener('click', () => { if (S.layout !== 'dual' && S.layout !== p.key) setLayout(p.key); setFocus(p.idx); showFrame(p, a.frame); });
+    tb.append(tr);
+  }
+  t.append(tb); highlightRows();
+}
+function updateAngleCell(a) { const c = $(`ang-${a.id}`); if (c) c.textContent = angleOf(a.pts).toFixed(1); }
+function highlightRows() { document.querySelectorAll('#angTable tbody tr[data-id]').forEach(tr => { const a = S.angles.find(x => x.id === +tr.dataset.id); tr.classList.toggle('now', !!a && P[a.pane].frame === a.frame); }); }
+function tableRows() {
+  const head = ['動画', 'ファイル', '測定番号', 'フレーム', '時間(s)', '局面(%)', '角度(deg)', '点1_u', '点1_v', '頂点_u', '頂点_v', '点3_u', '点3_v'];
+  return [head, ...rowsSorted().map(a => { const p = P[a.pane], ph = phaseOf(p, a.frame); return [p.label, p.name, a.id, a.frame, (a.frame / p.fps).toFixed(4), ph == null ? '' : ph.toFixed(2), angleOf(a.pts).toFixed(2), ...a.pts.flat().map(v => v.toFixed(1))]; })];
+}
+function updateHints() {
+  P.forEach(p => {
+    const h = p.$('hint'); if (!h) return;
+    if (!S.angleMode || !p.n) { h.hidden = true; return; }
+    const n = S.pending && S.pending.pane === p.idx && S.pending.frame === p.frame ? S.pending.pts.length : 0;
+    h.hidden = false; h.textContent = ['1点目をクリック', '頂点（角度を測る関節）をクリック', '3点目をクリック'][n];
+  });
+}
+
+/* ---------- 全体の操作 ---------- */
+function setLayout(l) {
+  S.layout = l;
+  document.querySelectorAll('#layoutSeg button').forEach(b => b.classList.toggle('on', b.dataset.layout === l));
+  $('panes').classList.toggle('single', l !== 'dual');
+  P.forEach(p => { p.$('pane').hidden = !(l === 'dual' || l === p.key); });
+  if (l !== 'dual') setFocus(l === 'a' ? 0 : 1); else setFocus(S.focus);
+  requestAnimationFrame(() => P.forEach(drawPane));
+}
+function setLink(l) {
+  S.link = l; if (S.playing) stopCommon();
+  document.querySelectorAll('#linkSeg button').forEach(b => b.classList.toggle('on', b.dataset.link === l));
+  refreshAxis(true);
+}
+async function snapshot() {
+  const cvs = visible().filter(p => p.n).map(p => p.cv);
+  if (!cvs.length) { toast('先に動画を読み込んでください'); return; }
+  const gap = 8, W = cvs.reduce((s, c) => s + c.width, 0) + gap * (cvs.length - 1), H = Math.max(...cvs.map(c => c.height));
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const ctx = out.getContext('2d'); ctx.fillStyle = '#101317'; ctx.fillRect(0, 0, W, H);
+  const saved = S.pointer; S.pointer = null; P.forEach(drawPane);
+  let x = 0; for (const c of cvs) { ctx.drawImage(c, x, (H - c.height) / 2); x += c.width + gap; }
+  S.pointer = saved;
+  out.toBlob(b => saveFile(`compare_${stamp()}.png`, b), 'image/png');
+}
+
+function bindGlobal() {
+  document.querySelectorAll('#layoutSeg button').forEach(b => b.addEventListener('click', () => setLayout(b.dataset.layout)));
+  document.querySelectorAll('#linkSeg button').forEach(b => b.addEventListener('click', () => setLink(b.dataset.link)));
+  $('snapBtn').addEventListener('click', snapshot);
+  $('cPrev').addEventListener('click', () => commonStep(-1)); $('cNext').addEventListener('click', () => commonStep(1));
+  $('cPrev10').addEventListener('click', () => commonStep(-10)); $('cNext10').addEventListener('click', () => commonStep(10));
+  $('cFirst').addEventListener('click', () => commonEdge(false)); $('cLast').addEventListener('click', () => commonEdge(true));
+  $('cPlay').addEventListener('click', playCommon);
+  $('cSlider').addEventListener('input', e => { if (S.playing) stopCommon(); setCommon(parseInt(e.target.value)); });
+  $('angMode').addEventListener('click', () => {
+    S.angleMode = !S.angleMode; S.pending = null;
+    $('angMode').textContent = `3点で角度を測る：${S.angleMode ? 'ON' : 'OFF'}`; $('angMode').classList.toggle('on', S.angleMode);
+    updateHints(); P.forEach(drawPane);
+  });
+  $('angNext').addEventListener('click', async () => {
+    const p = P[S.focus]; if (!p.n) return;
+    const cur = S.angles.filter(a => a.pane === p.idx && a.frame === p.frame);
+    if (!cur.length) { toast('このフレームに角度の測定がありません'); return; }
+    const nf = p.frame + 1; if (nf >= p.n) return;
+    if (!S.angles.some(a => a.pane === p.idx && a.frame === nf)) cur.forEach(a => { S.angles.push({ id: S.seq, pane: p.idx, frame: nf, pts: a.pts.map(q => q.slice()), color: a.color }); S.seq++; });
+    renderTable(); await showFrame(p, nf);
+    toast('次のフレームへ引き継ぎました。点をドラッグして合わせてください');
+  });
+  $('angClear').addEventListener('click', () => { const p = P[S.focus]; S.angles = S.angles.filter(a => !(a.pane === p.idx && a.frame === p.frame)); S.pending = null; renderTable(); drawPane(p); updateHints(); });
+  $('angGhost').addEventListener('change', e => { S.ghost = e.target.checked; P.forEach(drawPane); });
+  $('angCsv').addEventListener('click', () => {
+    if (!S.angles.length) { toast('角度の測定がまだありません'); return; }
+    const csv = '﻿' + tableRows().map(r => r.map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')).join('\r\n');
+    saveFile(`angles_${stamp()}.csv`, new Blob([csv], { type: 'text/csv' }));
+  });
+  $('angCopy').addEventListener('click', async () => {
+    if (!S.angles.length) { toast('角度の測定がまだありません'); return; }
+    try { await navigator.clipboard.writeText(tableRows().map(r => r.join('\t')).join('\n')); toast('表をコピーしました。Excel に貼り付けられます'); }
+    catch (e) { toast('コピーできませんでした。CSV で保存してください'); }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, select, textarea')) return;
+    const linked = S.axis && S.axis.ok && !S.axis.none;
+    const go = d => { if (linked || S.link === 'none' && e.altKey) commonStep(d); else { const p = P[S.focus]; if (p.playing) stopPanePlay(p); showFrame(p, p.frame + d); } };
+    if (e.key === 'ArrowRight') { go(e.shiftKey ? 10 : 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { go(e.shiftKey ? -10 : -1); e.preventDefault(); }
+    else if (e.key === ' ') { linked ? playCommon() : (P[S.focus].playing ? stopPanePlay(P[S.focus]) : startPanePlay(P[S.focus])); e.preventDefault(); }
+    else if (e.key === 'Escape') { S.pending = null; updateHints(); P.forEach(drawPane); }
+  });
+}
+
+P.forEach(buildPane);
+bindGlobal();
+setLayout('dual'); setFocus(0); renderTable(); refreshAxis(false);
+P.forEach(renderPane);
+getDl();
+window.MC = { P, S, loadVideo, showFrame, setLink, setLayout, setCommon, angleOf, refreshAxis };
+})();
+</script>
+</body>
+</html>

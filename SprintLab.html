@@ -1,0 +1,2460 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>SprintLab — 疾走速度曲線</title>
+<style>:root {
+  color-scheme: light;
+  --bg: #f1f1ee; --surface: #fcfcfb; --surface-2: #f3f3f0; --surface-3: #e9e8e4;
+  --border: #dcdbd6; --border-strong: #c3c2b7;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #7c7a75;
+  --accent: #2a78d6; --accent-ink: #ffffff; --accent-soft: #e3eefb;
+  --danger: #c73b3a; --ok: #0a7a2f; --warn: #a86a00;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --grid: #e6e5e0; --axis: #c3c2b7;
+  --stage: #0d0d0c;
+  --radius: 8px;
+  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #222220; --surface-3: #2b2b29;
+    --border: #353532; --border-strong: #4a4945;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8d87;
+    --accent: #3987e5; --accent-ink: #ffffff; --accent-soft: #1d2c40;
+    --danger: #e66767; --ok: #3fb26a; --warn: #d9a03a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --grid: #2a2a28; --axis: #383835;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
+
+/* ---------- header ---------- */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+.brand { display: flex; align-items: baseline; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: .02em; }
+.brand .logo { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--text); color: var(--surface); font-size: 13px; align-self: center; }
+.brand small { font-weight: 400; color: var(--text-2); font-size: 12px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); }
+.badge { padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12px; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: middle; }
+.status-dot.ok { background: var(--ok); } .status-dot.busy { background: var(--warn); } .status-dot.err { background: var(--danger); }
+
+/* ---------- layout ---------- */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 12px; padding: 12px; align-items: start; }
+@media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+.viewer-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; position: sticky; top: 56px; }
+@media (max-width: 1000px) { .viewer-col { position: static; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+
+.viewer-toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 6px 8px; }
+.toolbar-group { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
+.toolbar-group label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 4px 12px; cursor: pointer; color: var(--text-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.active { background: var(--text); color: var(--surface); }
+.seg button:disabled { opacity: .35; cursor: not-allowed; }
+
+.stage { position: relative; background: var(--stage); border-radius: var(--radius); overflow: hidden; height: min(62vh, 640px); min-height: 280px; touch-action: none; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.drop-hint { position: absolute; inset: 0; display: grid; place-items: center; color: #9a9893; font-size: 14px; pointer-events: none; text-align: center; padding: 20px; }
+.mode-hint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(20,20,19,.86); color: #f0efec; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; pointer-events: none; white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
+.stage-msg { position: absolute; right: 10px; bottom: 10px; background: rgba(20,20,19,.86); color: #f0efec; padding: 4px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; }
+
+.timeline { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.tl-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tl-row input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+.tl-row.small { font-size: 12.5px; color: var(--text-2); }
+.tl-row input[type=number] { width: 78px; }
+.frame-info { min-width: 170px; text-align: right; font-size: 12.5px; }
+.range-bar { position: relative; height: 6px; background: var(--surface-3); border-radius: 3px; margin: 0 2px; }
+.range-bar .fill { position: absolute; top: 0; bottom: 0; background: var(--accent); opacity: .55; border-radius: 3px; }
+.range-bar .ev { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--s2); }
+
+/* ---------- controls ---------- */
+.btn, button.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 11px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--surface); cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.07); background: var(--accent); }
+.btn.danger { color: var(--danger); }
+.btn.on { background: var(--text); color: var(--surface); border-color: var(--text); }
+.btn.sm { padding: 2px 8px; font-size: 12.5px; }
+.icon-btn { width: 32px; padding: 4px 0; }
+input[type=number], input[type=text], select, textarea { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 4px 7px; min-width: 0; }
+input[type=number] { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+textarea { width: 100%; font-family: var(--mono); font-size: 12px; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- side panel ---------- */
+.panel-col { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px; }
+.tabs button { border: 1px solid transparent; background: transparent; padding: 7px 4px; border-radius: 7px; cursor: pointer; color: var(--text-2); font-size: 13px; }
+.tabs button:hover { background: var(--surface-2); }
+.tabs button.active { background: var(--text); color: var(--surface); font-weight: 600; }
+.tab { display: none; padding: 4px 14px 16px; }
+.tab.active { display: block; }
+.tab h3 { font-size: 13px; margin: 16px 0 8px; color: var(--text-2); letter-spacing: .04em; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.tab h3::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.field { display: grid; grid-template-columns: 128px 1fr; gap: 6px 10px; align-items: center; margin: 6px 0; }
+.field > label, .field > .lbl { color: var(--text-2); font-size: 13px; }
+.field .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.field input[type=number] { width: 96px; }
+.note { font-size: 12.5px; color: var(--text-2); margin: 6px 0; }
+.note.warn { color: var(--warn); }
+.note.err { color: var(--danger); }
+.note.okc { color: var(--ok); }
+.hint-box { font-size: 12.5px; color: var(--text-2); background: var(--surface-2); border-radius: 7px; padding: 8px 10px; margin: 8px 0; }
+.hint-box ul { margin: 4px 0; padding-left: 18px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
+.radio-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.radio-row label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.cam-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: var(--surface-2); }
+.cam-card h4 { margin: 0 0 6px; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center; }
+.kv { font-size: 12.5px; color: var(--text-2); }
+.progress { height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; margin: 6px 0; }
+.progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .15s; }
+details { margin: 8px 0; }
+details > summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
+.tbl-wrap { overflow: auto; max-height: 300px; border: 1px solid var(--border); border-radius: 7px; }
+table.tbl { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+table.tbl th, table.tbl td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+table.tbl th { position: sticky; top: 0; background: var(--surface-2); color: var(--text-2); font-weight: 600; z-index: 1; }
+table.tbl td:first-child, table.tbl th:first-child { text-align: left; }
+table.tbl td input { width: 66px; padding: 2px 4px; }
+table.tbl tr.sel td { background: var(--accent-soft); }
+table.tbl td.mono { font-family: var(--mono); }
+.list { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.list-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); cursor: pointer; }
+.list-item.sel { border-color: var(--accent); background: var(--accent-soft); }
+.list-item .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.chk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 10px; font-size: 13px; }
+.chk-grid label { display: flex; gap: 6px; align-items: center; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-box { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface-2); margin: 8px 0; font-size: 13px; }
+.result-box .big { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- results ---------- */
+.results { margin: 0 12px 16px; padding: 12px 14px; }
+.results-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.results-head h2 { font-size: 15px; margin: 0; }
+.dirty { font-size: 12.5px; color: var(--warn); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0 6px; font-size: 13px; color: var(--text-2); }
+.filters select { max-width: 260px; }
+.series-pick { display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow: auto; margin-bottom: 6px; }
+.chip { border: 1px solid var(--border-strong); border-radius: 999px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; background: var(--surface); color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; }
+.chip.on { color: var(--text); border-color: var(--text); background: var(--surface-2); }
+.chip .key { width: 14px; height: 2px; border-radius: 1px; }
+.chart-wrap { position: relative; height: 320px; background: var(--surface); }
+.chart-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); min-width: 150px; z-index: 5; }
+.tip .t { color: var(--muted); margin-bottom: 3px; }
+.tip .r { display: flex; align-items: center; gap: 7px; }
+.tip .r b { font-variant-numeric: tabular-nums; }
+.tip .r span { color: var(--text-2); }
+.tip .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); margin: 6px 0; }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.legend .key { width: 16px; height: 2px; border-radius: 1px; }
+.empty { color: var(--muted); font-size: 13px; padding: 30px; text-align: center; }
+
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--surface); padding: 8px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100; max-width: 90vw; }
+#toast.show { opacity: 1; }
+.help h4 { margin: 14px 0 4px; font-size: 13.5px; }
+.help p, .help li { font-size: 13px; color: var(--text-2); }
+.help ol, .help ul { padding-left: 18px; margin: 4px 0; }
+.help code { font-family: var(--mono); font-size: 12px; background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
+.help table { font-size: 12px; border-collapse: collapse; width: 100%; margin: 6px 0; }
+.help td, .help th { border-bottom: 1px solid var(--border); padding: 3px 4px; text-align: left; vertical-align: top; }
+body.mode-2d .only3d { display: none !important; }
+body.mode-3d .only2d { display: none !important; }
+@media (max-width: 640px) {
+  .brand small { display: none; }
+  .topbar { padding: 6px 10px; }
+  .topbar-right { font-size: 11px; }
+  .stage { height: 46vh; }
+  .layout { padding: 8px; }
+  .field { grid-template-columns: 110px 1fr; }
+}
+
+/* ---------- 走り幅跳び：結果タイル ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
+.kpi { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 2px; }
+.kpi .k { font-size: 12px; color: var(--text-2); }
+.kpi .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; line-height: 1.2; }
+.kpi .v small { font-size: 13px; font-weight: 500; color: var(--text-2); margin-left: 3px; }
+.kpi .d { font-size: 11.5px; color: var(--muted); }
+.kpi.main { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.kpi.vx .k::before, .kpi.vy .k::before { content: ""; display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.kpi.vx .k::before { background: var(--s1); } .kpi.vy .k::before { background: var(--s2); }
+.sec-title { font-size: 13px; font-weight: 700; color: var(--text-2); margin: 14px 0 4px; letter-spacing: .04em; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.chart-box { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: var(--surface); }
+.chart-box h4 { margin: 0 0 4px; font-size: 13px; }
+.chart-box .chart-wrap { height: 250px; }
+.ev-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.ev-row .nm { font-size: 13px; }
+.ev-row .nm small { display: block; color: var(--text-2); font-size: 11.5px; }
+.ev-row .val { min-width: 70px; text-align: right; }
+.dot-ev { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+
+/* ---------- SprintLab ---------- */
+.tabs { grid-template-columns: repeat(3, 1fr); }
+.cov-wrap { height: 8px; margin: 0 2px; border-radius: 3px; overflow: hidden; background: var(--surface-3); }
+.cov-wrap canvas { width: 100%; height: 100%; display: block; }
+.kpis.small { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+.kpis.small .kpi .v { font-size: 19px; }
+.kpis.small .kpi { padding: 8px 10px; }
+.charts-main { margin: 6px 0 10px; }
+.chart-wrap.big { height: 360px; }
+.chart-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 4px; }
+.chart-head h4 { margin: 0; font-size: 14px; }
+.chart-head label { display: inline-flex; align-items: center; gap: 4px; margin: 0; cursor: pointer; }
+.split-and-model { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 8px; }
+@media (max-width: 900px) { .split-and-model { grid-template-columns: 1fr; } }
+table.tbl td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+table.tbl tr.goal td { font-weight: 700; }
+#mkTable td input { width: 70px; }
+#mkTable td { padding: 3px 5px; }
+#mkTable td .pt { font-family: var(--mono); font-size: 11.5px; color: var(--text-2); }
+#mkTable tr.need td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.map-box { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface-2); margin: 8px 0; font-size: 12.5px; }
+.map-box b { font-variant-numeric: tabular-nums; }
+.map-box ul { margin: 4px 0 0; padding-left: 18px; color: var(--warn); }
+.audio-cv { width: 100%; height: 56px; display: block; margin: 6px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.trial-add { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 8px; }
+.trial-add input { flex: 1; min-width: 200px; }
+.warn-box { border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 8%, var(--surface)); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--text); margin: 6px 0; }
+.warn-box ul { margin: 2px 0; padding-left: 18px; }
+.help svg { width: 100%; height: auto; display: block; margin: 6px 0; }
+.kpi .v .sub { font-size: 13px; font-weight: 500; color: var(--text-2); margin-left: 6px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">SP</span>SprintLab <small>短距離走の疾走速度曲線（固定カメラ・横からの映像）</small></div>
+  <div class="topbar-right"><span id="topStatus">動画を読み込んでください</span></div>
+</header>
+
+<main class="layout">
+  <section class="viewer-col">
+    <div class="card viewer-toolbar">
+      <div class="toolbar-group">
+        <div class="seg" id="viewMode" role="group" aria-label="表示">
+          <button data-v="video" class="active">映像</button><button data-v="bg">背景</button><button data-v="fg">前景</button>
+        </div>
+        <label><input type="checkbox" id="showAxis" checked>距離の目盛り</label>
+        <label><input type="checkbox" id="showBand" checked>追跡の範囲</label>
+        <label><input type="checkbox" id="showTrack" checked>走者の位置</label>
+      </div>
+      <div class="toolbar-group">
+        <button class="btn icon-btn" id="zoomOut" title="縮小">−</button>
+        <button class="btn sm" id="zoomReset">全体</button>
+        <button class="btn icon-btn" id="zoomIn" title="拡大">＋</button>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="view"></canvas>
+      <div id="dropHint" class="drop-hint">「① 動画」タブから、横から固定で撮った短距離走の動画を読み込んでください<br>（ここにドラッグ＆ドロップもできます）</div>
+      <div id="modeHint" class="mode-hint" hidden></div>
+    </div>
+    <div class="card timeline">
+      <div class="tl-row">
+        <button class="btn icon-btn" id="btnPrev10" title="10コマ戻る (Shift+←)">«</button>
+        <button class="btn icon-btn" id="btnPrev" title="1コマ戻る (←)">‹</button>
+        <button class="btn icon-btn" id="btnPlay" title="再生/停止 (Space)">▶</button>
+        <button class="btn icon-btn" id="btnNext" title="1コマ進む (→)">›</button>
+        <button class="btn icon-btn" id="btnNext10" title="10コマ進む (Shift+→)">»</button>
+        <input type="range" id="frameSlider" min="0" max="0" value="0" aria-label="フレーム">
+        <span id="frameInfo" class="mono frame-info">—</span>
+      </div>
+      <div class="cov-wrap" title="追跡の状態（青＝自動、紫＝重なりを補正、桃＝手動、灰＝除外、橙＝不採用）"><canvas id="covBar"></canvas></div>
+      <div class="tl-row small">
+        <span>解析範囲</span>
+        <input id="rangeStart" type="number" min="0" value="0" aria-label="開始フレーム">
+        <button class="btn sm" id="setStart">開始＝現在</button>
+        <span>〜</span>
+        <input id="rangeEnd" type="number" min="0" value="0" aria-label="終了フレーム">
+        <button class="btn sm" id="setEnd">終了＝現在</button>
+        <span id="rangeInfo" class="mono"></span>
+        <span style="flex:1"></span>
+        <label>再生速度 <select id="playRate"><option value="0.1">0.1×</option><option value="0.25">0.25×</option><option value="0.5" selected>0.5×</option><option value="1">1×</option></select></label>
+      </div>
+    </div>
+  </section>
+
+  <aside class="card panel-col">
+    <nav class="tabs" id="tabs">
+      <button data-tab="video" class="active">① 動画</button>
+      <button data-tab="dist">② 距離</button>
+      <button data-tab="track">③ 追跡</button>
+      <button data-tab="time">④ 時間・計算</button>
+      <button data-tab="export">⑤ 保存</button>
+      <button data-tab="help">使い方</button>
+    </nav>
+
+    <section class="tab active" id="tab-video">
+      <h3>動画</h3>
+      <input type="file" id="file0" accept="video/*,.mov,.mp4,.m4v,.webm">
+      <div class="kv" id="camInfo">未読込</div>
+      <div class="field"><label for="fpsFile">ファイルのfps</label><div class="row"><input type="number" id="fpsFile" step="0.01" min="1" value="30"><button class="btn sm" id="detectFps">自動検出</button></div></div>
+      <div class="field"><label for="fpsCap">撮影fps（実時間）</label><div class="row"><input type="number" id="fpsCap" step="0.01" min="1" value="30"><span class="note">スロー動画は撮影時のfps</span></div></div>
+      <p class="note warn" id="fpsWarn" hidden>30 fps でも速度曲線は出せますが、動き出しや区間タイムの精度のため 60 fps 以上（できれば 120 fps）を推奨します。</p>
+      <div class="hint-box"><b>撮影のポイント</b>
+        <ul>
+          <li>三脚でカメラを固定し、走路の<b>中央の真横</b>から撮る（ズーム・向きは途中で変えない）</li>
+          <li>カメラは走路から<b>走る距離の 0.7 倍以上</b>離す（例：30 m 走 → 21 m 以上）。超広角（0.5×）は避ける</li>
+          <li>高さは腰くらい、画面を水平に。スタートの数秒前から、走者が画面の外に出るまで撮る</li>
+          <li>スタートとゴールに目印（コーン）を、<b>走るレーンの手前と奥の両側</b>に置く。10 m ごとにも置くとさらに正確</li>
+          <li>画面には走者を1人だけ。走路の近くを人が横切らないようにする</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="tab" id="tab-dist">
+      <h3>距離の基準（マーカー）</h3>
+      <div class="field"><span class="lbl">マーカーの置き方</span><div class="radio-row" style="flex-direction:column;gap:3px">
+        <label><input type="radio" name="mkPair" value="1" checked> レーンの手前と奥に1つずつ（推奨）</label>
+        <label><input type="radio" name="mkPair" value="0"> 走るライン上に1つ</label></div></div>
+      <p class="note">各距離の目印の<b>根元（地面に接している所）</b>をクリックします。「指定」を押すと、まだ指定していない点を順にクリックできます。点はドラッグで動かせます。</p>
+      <div class="tbl-wrap" style="max-height:none"><table class="tbl" id="mkTable"></table></div>
+      <div class="btn-row"><button class="btn sm" id="mkAdd">＋ マーカーを追加</button><button class="btn sm" id="mkPickAll">未指定の点を順にクリック</button></div>
+      <div class="field"><label for="mapMethod">換算のしかた</label><select id="mapMethod">
+        <option value="auto" selected>自動（3距離以上で透視補正）</option>
+        <option value="linear">直線（カメラが正対）</option>
+        <option value="proj">透視補正（カメラが斜め）</option>
+        <option value="spline">透視補正＋曲線補正（レンズのゆがみ・4距離以上）</option></select></div>
+      <div id="mapResult"></div>
+      <details id="bandDetails">
+        <summary>追跡する範囲（帯）の設定</summary>
+        <div class="field"><label for="bAbove">地面から上</label><div class="row"><input type="number" id="bAbove" step="0.1" min="1" value="2.4"> m</div></div>
+        <div class="field"><label for="bBelow">地面から下</label><div class="row"><input type="number" id="bBelow" step="0.1" min="0" value="0.4"> m</div></div>
+        <div class="field"><label for="bBefore">最初の目印より手前</label><div class="row"><input type="number" id="bBefore" step="0.5" min="0" value="3"> m</div></div>
+        <div class="field"><label for="bAfter">最後の目印より先</label><div class="row"><input type="number" id="bAfter" step="0.5" min="0" value="6"> m</div></div>
+        <p class="note">映像の上の点線の枠が、走者を探す範囲です。走者の全身が枠に入り、ほかに動くもの（人・旗など）がなるべく入らないようにします。</p>
+      </details>
+    </section>
+
+    <section class="tab" id="tab-track">
+      <h3>自動追跡（背景差分）</h3>
+      <p class="note">固定カメラの映像から、背景と違う部分（走者のシルエット）を見つけ、その<b>中心</b>の位置を毎コマ求めます。まず「解析範囲」をスタートの少し前から走者が画面を出るまでに設定してください。</p>
+      <div class="field"><label for="thr">検出のしきい値</label><div class="row"><input type="number" id="thr" step="1" min="5" max="120" value="30"><span class="note">大きいほど鈍感</span></div></div>
+      <div class="field"><span class="lbl">影</span><label class="row"><input type="checkbox" id="shadow" checked> 地面の影を除く</label></div>
+      <div class="field"><span class="lbl">背景の作り方</span><div class="radio-row" style="flex-direction:column;gap:3px">
+        <label><input type="radio" name="bgMode" value="median" checked> 自動（動画全体の中央値）</label>
+        <label><input type="radio" name="bgMode" value="frame"> 現在のフレーム（走者が写っていない場面）</label></div></div>
+      <div class="field"><label for="every">解析の間隔</label><select id="every"><option value="0" selected>自動</option><option value="1">1コマごと</option><option value="2">2コマごと</option><option value="3">3コマごと</option><option value="4">4コマごと</option></select></div>
+      <div class="field"><span class="lbl">走者の位置</span><div class="row"><button class="btn sm" id="pickRunner">走者をクリック（任意）</button><span class="note" id="runnerInfo">自動で探します</span></div></div>
+      <div class="btn-row"><button class="btn primary" id="runTrack">追跡を開始</button><button class="btn danger" id="cancelTrack" disabled>中止</button></div>
+      <div class="progress"><div id="trkProg"></div></div>
+      <div class="note mono" id="trkStatus"></div>
+      <h3>確認と修正</h3>
+      <p class="note">映像を「前景」表示にすると、走者として検出された部分が赤く表示されます。コマ送りで、縦線が走者の体の中心にあるか確認します。</p>
+      <div class="btn-row">
+        <button class="btn sm" id="manClick">クリックで修正：OFF</button>
+        <label class="note">クリック後 <input type="number" id="manStep" value="0" min="0" step="1" style="width:56px"> コマ進む</label>
+      </div>
+      <div class="btn-row"><button class="btn sm danger" id="manDel">現フレームの修正を削除</button><button class="btn sm" id="retrack">現フレームから再追跡</button></div>
+      <div class="btn-row"><span class="note">除外する区間：</span><button class="btn sm" id="exA">開始＝現在</button><button class="btn sm" id="exB">終了＝現在で追加</button></div>
+      <div id="exList" class="list"></div>
+      <div class="kv" id="manInfo"></div>
+    </section>
+
+    <section class="tab" id="tab-time">
+      <h3>時間の基準（0 秒）</h3>
+      <div class="radio-row" style="flex-direction:column;gap:3px">
+        <label><input type="radio" name="tref" value="auto" checked> 自動（静止からなら動き出し、加速走なら 0 m の通過）</label>
+        <label><input type="radio" name="tref" value="onset"> 動き出し</label>
+        <label><input type="radio" name="tref" value="signal"> スターターの合図</label>
+        <label><input type="radio" name="tref" value="line"> 0 m（最初の目印）の通過</label>
+      </div>
+      <div class="cam-card">
+        <h4>動き出し <span class="mono" id="onsetInfo">—</span></h4>
+        <div class="btn-row"><button class="btn sm" id="onsetSet">現在のフレームを動き出しに</button><button class="btn sm" id="onsetAuto">自動に戻す</button><button class="btn sm" id="onsetGo">そのフレームへ</button></div>
+      </div>
+      <div class="cam-card">
+        <h4>合図 <span class="mono" id="signalInfo">未設定</span></h4>
+        <div class="btn-row"><button class="btn sm" id="signalSet">現在のフレームを合図に</button><button class="btn sm" id="signalAudio">音から探す</button><button class="btn sm" id="signalGo">そのフレームへ</button><button class="btn sm danger" id="signalDel">消す</button></div>
+        <div class="field"><label for="soundDist">音源〜カメラの距離</label><div class="row"><input type="number" id="soundDist" step="1" min="0" value="0"> m <span class="note">音の遅れ（343 m/s）を補正</span></div></div>
+        <canvas id="audioCv" class="audio-cv" hidden></canvas>
+        <p class="note">ピストル・手を叩く音・笛などで合図した場合に使えます。合図→動き出しの時間（反応時間の目安）も表示されます。</p>
+      </div>
+      <h3>計算</h3>
+      <div class="field"><label for="cutoff">平滑化</label><div class="row"><input type="number" id="cutoff" step="0.5" min="0.5" max="10" value="2"> Hz <span class="note">小さいほどなめらか（1歩ごとの揺れを除く）</span></div></div>
+      <div class="field"><span class="lbl">区間タイム</span><div class="radio-row"><label><input type="radio" name="split" value="5"> 5 m ごと</label><label><input type="radio" name="split" value="10" checked> 10 m ごと</label></div></div>
+      <h3>選手（力–速度プロファイル用・任意）</h3>
+      <div class="field"><label for="mass">体重</label><div class="row"><input type="number" id="mass" step="0.1" min="20" placeholder="例 65"> kg</div></div>
+      <div class="field"><label for="height">身長</label><div class="row"><input type="number" id="height" step="0.01" min="1" placeholder="例 1.72"> m</div></div>
+      <details>
+        <summary>空気抵抗の条件</summary>
+        <div class="field"><label for="temp">気温</label><div class="row"><input type="number" id="temp" step="1" value="20"> ℃</div></div>
+        <div class="field"><label for="press">気圧</label><div class="row"><input type="number" id="press" step="1" value="1013"> hPa</div></div>
+        <div class="field"><label for="wind">風速</label><div class="row"><input type="number" id="wind" step="0.1" value="0"> m/s <span class="note">追い風を ＋</span></div></div>
+      </details>
+    </section>
+
+    <section class="tab" id="tab-export">
+      <h3>保存</h3>
+      <div class="btn-row"><button class="btn primary" id="exXlsx">Excel（結果・区間・時系列）を保存</button></div>
+      <div class="btn-row"><button class="btn" id="exCsv">時系列を CSV で保存</button><button class="btn" id="exChart">速度曲線を画像で保存</button><button class="btn" id="exView">映像を画像で保存</button></div>
+      <h3>プロジェクト</h3>
+      <div class="btn-row"><button class="btn" id="projSave">プロジェクトを保存（JSON）</button><label class="btn">プロジェクトを開く<input type="file" id="projLoad" accept=".json,application/json" hidden></label></div>
+      <p class="note">マーカー・追跡結果・修正・設定・比較リストを保存します（動画は含みません）。開いたあとに同じ動画を読み込むと映像も表示されます。</p>
+    </section>
+
+    <section class="tab help" id="tab-help"><h4>このアプリでわかること</h4>
+<ul>
+  <li><b>疾走速度曲線</b>（距離–速度、時間–速度）と区間平均速度</li>
+  <li><b>区間タイム</b>（5 m または 10 m ごと、ゴールのタイム）、最高速度とその地点</li>
+  <li>加速の特徴（指数モデルの vmax・τ）、体重と身長を入れると<b>力–速度プロファイル</b>（F0・V0・Pmax）</li>
+  <li>合図を設定すると、合図から動き出しまでの時間（反応時間の目安）</li>
+</ul>
+
+<h4>撮影のしかた（上から見た図）</h4>
+<svg viewBox="0 0 400 250" role="img" aria-label="撮影の配置図：走路の中央の真横にカメラ、スタートとゴールにレーンの両側のコーン">
+  <rect x="20" y="52" width="370" height="34" rx="2" style="fill:var(--surface-3)"/>
+  <line x1="20" y1="52" x2="390" y2="52" style="stroke:var(--border-strong);stroke-width:1.5"/>
+  <line x1="20" y1="86" x2="390" y2="86" style="stroke:var(--border-strong);stroke-width:1.5"/>
+  <line x1="28" y1="69" x2="380" y2="69" style="stroke:var(--s1);stroke-width:2"/>
+  <path d="M380 69 l-9 -5 v10 z" style="fill:var(--s1)"/>
+  <text x="300" y="66" style="fill:var(--s1);font-size:10px">走る向き</text>
+  <g style="fill:var(--s2)">
+    <path d="M50 47 l-5 9 h10 z"/><path d="M50 81 l-5 9 h10 z"/>
+    <path d="M350 47 l-5 9 h10 z"/><path d="M350 81 l-5 9 h10 z"/>
+  </g>
+  <g style="fill:none;stroke:var(--s2);stroke-width:1.2;stroke-dasharray:2 2">
+    <path d="M150 47 l-5 9 h10 z"/><path d="M150 81 l-5 9 h10 z"/>
+    <path d="M250 47 l-5 9 h10 z"/><path d="M250 81 l-5 9 h10 z"/>
+  </g>
+  <g style="fill:var(--text-2);font-size:10px" text-anchor="middle">
+    <text x="50" y="38">0 m（スタート）</text><text x="150" y="38">10 m</text><text x="250" y="38">20 m</text><text x="350" y="38">30 m（ゴール）</text>
+  </g>
+  <line x1="200" y1="205" x2="40" y2="69" style="stroke:var(--muted);stroke-dasharray:4 3"/>
+  <line x1="200" y1="205" x2="360" y2="69" style="stroke:var(--muted);stroke-dasharray:4 3"/>
+  <line x1="200" y1="92" x2="200" y2="198" style="stroke:var(--text-2)"/>
+  <path d="M200 92 l-4 7 h8 z M200 198 l-4 -7 h8 z" style="fill:var(--text-2)"/>
+  <text x="207" y="140" style="fill:var(--text);font-size:10.5px">走る距離 × 0.7 以上</text>
+  <text x="207" y="154" style="fill:var(--text-2);font-size:10px">（30 m 走なら 21 m 以上）</text>
+  <rect x="188" y="203" width="24" height="16" rx="3" style="fill:var(--text)"/>
+  <circle cx="200" cy="211" r="4.5" style="fill:var(--surface)"/>
+  <text x="200" y="236" text-anchor="middle" style="fill:var(--text);font-size:10.5px">カメラ：走路の中央の真横・三脚で固定・腰の高さで水平</text>
+  <text x="200" y="248" text-anchor="middle" style="fill:var(--text-2);font-size:9.5px">▲ コーン（スタートとゴールは必須、点線の途中のコーンは推奨）</text>
+</svg>
+<ul>
+  <li>カメラは<b>三脚で固定</b>し、撮影中にズーム・向きを変えない（手持ちは不可）</li>
+  <li>走路の<b>中央の真横</b>に置き、走る距離の 0.7 倍以上離して、スタートの少し手前からゴールの先までを1画面に入れる。超広角（0.5×）はゆがみが大きいので避ける</li>
+  <li>コーンは<b>走るレーンの手前と奥の両側</b>に置く（走者はその中央を走る）。片側だけだと、奥行きの差のぶん距離がずれます</li>
+  <li>途中（10 m ごと）にもコーンを置くと、カメラが少し斜めでも正確に換算できます（透視補正）</li>
+  <li>60 fps 以上（できれば 120 fps）、1080p 以上で撮影。iPhone は「設定 → カメラ → フォーマット → 互換性優先」</li>
+  <li>画面に入る走者は1人。走路の近くを人が横切らないようにし、スタート前の静止と、走者が画面の外に出るまでを撮る</li>
+</ul>
+
+<h4>手順</h4>
+<ol>
+  <li><b>① 動画</b>：動画を読み込み、fps を確認（スロー動画は撮影 fps を入力）</li>
+  <li><b>② 距離</b>：各コーンの根元を「手前」「奥」の順にクリックし、距離を入力。黄色の目盛りが実際の位置と合っているか確認</li>
+  <li><b>解析範囲</b>：スタートの少し前〜走者が画面を出るまでを「開始＝現在」「終了＝現在」で設定</li>
+  <li><b>③ 追跡</b>：「追跡を開始」。コマ送りで、青い縦線が走者の体の中心にあるか確認。ずれていれば「クリックで修正」か「除外」</li>
+  <li><b>④ 時間・計算</b>：時間の基準（動き出し・合図）、区間（5 m／10 m）、体重・身長を設定</li>
+  <li><b>結果</b>：画面下に速度曲線と区間タイム。⑤ で Excel に保存。「比較に追加」で試技を重ねて表示</li>
+</ol>
+
+<h4>計算方法</h4>
+<table>
+  <tr><th>項目</th><th>求め方</th></tr>
+  <tr><td>走者の位置</td><td>動画全体から作った背景（走者のいない画像）との差で走者のシルエットを見つけ、その中心（重心の近似）を走路の軸に投影します</td></tr>
+  <tr><td>距離の換算</td><td>コーンの位置から、画像上の位置 → 距離の関係を求めます。2距離：直線、3距離以上：透視補正 d = (a·s + b)/(c·s + 1)、さらに曲線補正（自然3次スプライン）も選べます</td></tr>
+  <tr><td>速度・加速度</td><td>位置を4次 Butterworth フィルタ（位相遅れなし、標準 2 Hz）で平滑化し、中心差分で微分。1歩ごとの速度の揺れは除かれます（灰色の線は 6 Hz で、揺れを残した参考）。加速度は速度をもう一度同じフィルタで平滑化してから微分します</td></tr>
+  <tr><td>区間タイム</td><td>6 Hz で平滑化した位置が各距離を通過した時刻（コマの間は直線補間）。区間平均速度 = 区間の距離 ÷ 区間タイム</td></tr>
+  <tr><td>動き出し</td><td>静止からの走り出しに指数モデルを当てはめた開始時刻（当てはまりが悪いときは位置の変化から推定）。手動でも設定できます</td></tr>
+  <tr><td>指数モデル</td><td>v(t) = vmax(1 − e<sup>−t/τ</sup>) を位置のデータに最小二乗で当てはめ（最高速度付近まで）。τ は加速の速さ</td></tr>
+  <tr><td>力–速度プロファイル</td><td>Samozino ら（2016）の簡便法。水平力 = 体重 × 加速度 + 空気抵抗、その力と速度の直線から F0・V0、Pmax = F0·V0/4。RF は水平力の割合</td></tr>
+  <tr><td>合図</td><td>動画の音で最も大きな立ち上がりを探します。音源からカメラまでの距離を入れると、音の遅れ（343 m/s）を補正します</td></tr>
+</table>
+
+<h4>精度のための注意</h4>
+<ul>
+  <li>位置は「シルエットの中心」で、腰のマーカーやレーザー計測とは少し違います。腕や脚の振りで中心が前後するため、1歩ごとの揺れは平滑化で除いています</li>
+  <li>画面の端では走者が斜めから写るので、誤差が大きくなりやすいです。スタートとゴールの外側に 2〜3 m の余裕を</li>
+  <li>走者が画面の端にかかっているコマ、他の人と重なったコマは自動で不採用になります（タイムライン下の帯で橙色）</li>
+  <li>F0・V0・Pmax は、静止状態からの全力疾走で、最高速度付近まで写っているときだけ意味があります</li>
+  <li>研究に使うときは、光電管のタイムなどと比べて、自分の撮影条件での誤差を確かめておきましょう</li>
+</ul>
+
+<h4>操作</h4>
+<ul>
+  <li>← / → で1コマ、Shift で10コマ、Space で再生・停止、Esc で入力モードを解除</li>
+  <li>映像はホイールで拡大、ドラッグで移動。コーンの点はドラッグで動かせます</li>
+  <li>表示の「背景」「前景」で、背景画像と走者として検出された部分（赤）を確認できます</li>
+  <li>グラフをクリックすると、その時刻の映像に移動します</li>
+</ul>
+</section>
+  </aside>
+</main>
+
+<section class="card results" id="results">
+  <div class="results-head"><h2>結果</h2><span class="kv" id="resInfo"></span></div>
+  <div id="resWarn"></div>
+  <div class="kpis" id="kpiMain"></div>
+  <div class="charts-main">
+    <div class="chart-box">
+      <div class="chart-head">
+        <h4>疾走速度曲線</h4>
+        <div class="seg" id="xAxis" role="group" aria-label="横軸"><button data-x="d" class="active">距離</button><button data-x="t">時間</button></div>
+        <label class="note"><input type="checkbox" id="showDetail" checked> 1歩ごとの揺れ</label>
+        <label class="note"><input type="checkbox" id="showModel" checked> モデル</label>
+        <label class="note"><input type="checkbox" id="showSeg" checked> 区間平均</label>
+        <label class="note"><input type="checkbox" id="showTrials" checked> 比較</label>
+      </div>
+      <div class="chart-wrap big" id="cwV"><canvas id="chV"></canvas><div class="tip" id="tipV" hidden></div></div>
+      <div class="legend" id="lgV"></div>
+    </div>
+  </div>
+  <div class="split-and-model">
+    <div>
+      <div class="sec-title">区間タイム</div>
+      <div class="tbl-wrap" style="max-height:none"><table class="tbl" id="splitTable"></table></div>
+    </div>
+    <div>
+      <div class="sec-title">加速の特徴（指数モデル）</div>
+      <div class="kpis small" id="kpiModel"></div>
+      <div class="sec-title">力–速度プロファイル（Samozino 法）</div>
+      <div class="kpis small" id="kpiFv"></div>
+    </div>
+  </div>
+  <div class="charts">
+    <div class="chart-box"><h4>位置（追跡の確認）</h4><div class="chart-wrap" id="cwX"><canvas id="chX"></canvas><div class="tip" id="tipX" hidden></div></div><div class="legend" id="lgX"></div></div>
+    <div class="chart-box"><h4>加速度</h4><div class="chart-wrap" id="cwA"><canvas id="chA"></canvas><div class="tip" id="tipA" hidden></div></div><div class="legend" id="lgA"></div></div>
+  </div>
+  <div class="sec-title">比較（試技を重ねて表示）</div>
+  <div class="trial-add"><input type="text" id="trialName" placeholder="試技の名前（例：山田 1本目）"><button class="btn" id="trialAdd">この試技を比較に追加</button></div>
+  <div class="tbl-wrap" style="max-height:none"><table class="tbl" id="trialTable"></table></div>
+</section>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>/* ============================================================
+ * SprintLab core: 最小二乗・信号処理・xlsx 出力（LongJumpLab/MotionLab と共通）
+ * UI非依存（ブラウザ / Node どちらでも動作）
+ * ============================================================ */
+(function (root) {
+'use strict';
+
+// Householder QR による最小二乗解 (A: m×n 行配列, b: m)
+function lstsq(A, b) {
+  const m = A.length, n = A[0].length;
+  if (m < n) throw new Error('方程式の数が不足しています');
+  const R = A.map(r => Float64Array.from(r));
+  const y = Float64Array.from(b);
+  for (let k = 0; k < n; k++) {
+    let norm = 0;
+    for (let i = k; i < m; i++) norm += R[i][k] * R[i][k];
+    norm = Math.sqrt(norm);
+    if (norm === 0) continue;
+    const alpha = R[k][k] > 0 ? -norm : norm;
+    const v = new Float64Array(m);
+    for (let i = k; i < m; i++) v[i] = R[i][k];
+    v[k] -= alpha;
+    let vnorm2 = 0;
+    for (let i = k; i < m; i++) vnorm2 += v[i] * v[i];
+    if (vnorm2 === 0) continue;
+    for (let j = k; j < n; j++) {
+      let s = 0;
+      for (let i = k; i < m; i++) s += v[i] * R[i][j];
+      s = 2 * s / vnorm2;
+      for (let i = k; i < m; i++) R[i][j] -= s * v[i];
+    }
+    let s = 0;
+    for (let i = k; i < m; i++) s += v[i] * y[i];
+    s = 2 * s / vnorm2;
+    for (let i = k; i < m; i++) y[i] -= s * v[i];
+  }
+  const x = new Float64Array(n);
+  for (let k = n - 1; k >= 0; k--) {
+    let s = y[k];
+    for (let j = k + 1; j < n; j++) s -= R[k][j] * x[j];
+    if (Math.abs(R[k][k]) < 1e-14) throw new Error('解が一意に定まりません（点の配置を確認してください）');
+    x[k] = s / R[k][k];
+  }
+  return Array.from(x);
+}
+
+/* ---------------- 信号処理 ---------------- */
+
+// 2次 Butterworth を前後2回（4次・位相遅れなし）
+function butterLowpass(x, fs, fc) {
+  const n = x.length;
+  const out = Float64Array.from(x);
+  if (!(fc > 0) || n < 4) return out;
+  const fcAdj = fc / 0.802; // 2パス補正 (Winter)
+  if (fcAdj >= fs * 0.49) return out;
+  const K = Math.tan(Math.PI * fcAdj / fs);
+  const norm = 1 + Math.SQRT2 * K + K * K;
+  const b0 = K * K / norm, b1 = 2 * b0, b2 = b0;
+  const a1 = 2 * (K * K - 1) / norm, a2 = (1 - Math.SQRT2 * K + K * K) / norm;
+  // NaN で区切って連続区間ごとに処理
+  let i = 0;
+  while (i < n) {
+    while (i < n && !isFinite(x[i])) i++;
+    let j = i;
+    while (j < n && isFinite(x[j])) j++;
+    const len = j - i;
+    if (len >= 4) {
+      const seg = Array.from(x.slice(i, j));
+      const pad = Math.min(len - 1, Math.max(6, Math.round(3 * fs / fc)));
+      const ext = [];
+      for (let k = pad; k >= 1; k--) ext.push(2 * seg[0] - seg[k]);
+      ext.push(...seg);
+      for (let k = 1; k <= pad; k++) ext.push(2 * seg[len - 1] - seg[len - 1 - k]);
+      const pass = arr => {
+        const y = new Array(arr.length);
+        let x1 = arr[0], x2 = arr[0], y1 = arr[0], y2 = arr[0];
+        for (let k = 0; k < arr.length; k++) {
+          const yk = b0 * arr[k] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+          x2 = x1; x1 = arr[k]; y2 = y1; y1 = yk; y[k] = yk;
+        }
+        return y;
+      };
+      const f1 = pass(ext).reverse();
+      const f2 = pass(f1).reverse();
+      for (let k = 0; k < len; k++) out[i + k] = f2[pad + k];
+    }
+    i = j;
+  }
+  return out;
+}
+
+// 欠損補間（maxGap フレーム以下の欠損を線形補間）
+function fillGaps(x, maxGap) {
+  const y = Float64Array.from(x);
+  const n = y.length;
+  let i = 0;
+  while (i < n) {
+    if (isFinite(y[i])) { i++; continue; }
+    let j = i;
+    while (j < n && !isFinite(y[j])) j++;
+    const gap = j - i;
+    if (i > 0 && j < n && gap <= maxGap) {
+      const a = y[i - 1], b = y[j];
+      for (let k = i; k < j; k++) y[k] = a + (b - a) * (k - i + 1) / (gap + 1);
+    }
+    i = j;
+  }
+  return y;
+}
+
+// 数値微分（中心差分、端は片側差分）
+function deriv(x, dt) {
+  const n = x.length, d = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    const a = i > 0 ? x[i - 1] : NaN, b = i < n - 1 ? x[i + 1] : NaN, c = x[i];
+    if (isFinite(a) && isFinite(b)) d[i] = (b - a) / (2 * dt);
+    else if (isFinite(b) && isFinite(c)) d[i] = (b - c) / dt;
+    else if (isFinite(a) && isFinite(c)) d[i] = (c - a) / dt;
+  }
+  return d;
+}
+
+function unwrap(rad) {
+  const y = Float64Array.from(rad);
+  let off = 0, prev = NaN;
+  for (let i = 0; i < y.length; i++) {
+    if (!isFinite(y[i])) continue;
+    if (isFinite(prev)) {
+      let d = y[i] + off - prev;
+      while (d > Math.PI) { off -= 2 * Math.PI; d -= 2 * Math.PI; }
+      while (d < -Math.PI) { off += 2 * Math.PI; d += 2 * Math.PI; }
+    }
+    y[i] += off; prev = y[i];
+  }
+  return y;
+}
+
+// 時系列の線形補間（tSrc 昇順）
+function interpSeries(tSrc, ySrc, tDst) {
+  const out = new Float64Array(tDst.length).fill(NaN);
+  let k = 0;
+  for (let i = 0; i < tDst.length; i++) {
+    const t = tDst[i];
+    while (k < tSrc.length - 2 && tSrc[k + 1] < t) k++;
+    if (tSrc.length === 1) { if (Math.abs(tSrc[0] - t) < 1e-9) out[i] = ySrc[0]; continue; }
+    const t0 = tSrc[k], t1 = tSrc[k + 1];
+    if (t < t0 - 1e-9 || t > t1 + 1e-9) continue;
+    const a = ySrc[k], b = ySrc[k + 1];
+    const w = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
+    if (w < 1e-9) out[i] = a; else if (w > 1 - 1e-9) out[i] = b;
+    else if (isFinite(a) && isFinite(b)) out[i] = a + (b - a) * w;
+  }
+  return out;
+}
+
+
+/* ---------------- xlsx 出力（依存ライブラリなし） ---------------- */
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(buf) { let c = 0xFFFFFFFF; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+async function deflateRaw(data) {
+  if (typeof CompressionStream === 'undefined') return null;
+  try {
+    const cs = new CompressionStream('deflate-raw');
+    const blob = new Blob([data]);
+    const stream = blob.stream().pipeThrough(cs);
+    const ab = await new Response(stream).arrayBuffer();
+    return new Uint8Array(ab);
+  } catch (e) { return null; }
+}
+
+async function zip(files) { // files: [{name, data: Uint8Array}]
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  for (const f of files) {
+    const nameB = enc.encode(f.name);
+    const crc = crc32(f.data);
+    let comp = await deflateRaw(f.data); let method = 8;
+    if (!comp || comp.length >= f.data.length) { comp = f.data; method = 0; }
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, method, true);
+    lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, comp.length, true); lh.setUint32(22, f.data.length, true); lh.setUint16(26, nameB.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), nameB, comp);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, method, true);
+    ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, crc, true); ch.setUint32(20, comp.length, true); ch.setUint32(24, f.data.length, true);
+    ch.setUint16(28, nameB.length, true); ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), nameB);
+    offset += 30 + nameB.length + comp.length;
+  }
+  const csize = central.reduce((s, b) => s + b.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, csize, true); end.setUint32(16, offset, true);
+  const all = [...parts, ...central, new Uint8Array(end.buffer)];
+  const total = all.reduce((s, b) => s + b.length, 0);
+  const out = new Uint8Array(total); let p = 0;
+  for (const b of all) { out.set(b, p); p += b.length; }
+  return out;
+}
+
+const xmlEsc = s => String(s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+function colName(c) { let s = ''; c++; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
+function fmtNum(v) { if (!isFinite(v)) return null; if (Number.isInteger(v)) return String(v); const a = Math.abs(v); return a !== 0 && (a < 1e-4 || a >= 1e9) ? v.toExponential(7) : String(Number(v.toPrecision(8))); }
+
+/* sheets: [{ name, rows: Array<Array<string|number|null>>, freeze: {rows, cols}, headerRows, widths }] */
+async function buildXlsx(sheets) {
+  const enc = new TextEncoder();
+  const files = [];
+  const names = [];
+  sheets.forEach((sh, k) => {
+    let nm = String(sh.name).replace(/[\[\]\*\?\/\\:]/g, '_').slice(0, 31) || `Sheet${k + 1}`;
+    while (names.includes(nm)) nm = (nm.slice(0, 28) + '_' + k);
+    names.push(nm);
+  });
+  files.push({ name: '[Content_Types].xml', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+    sheets.map((_, k) => `<Override PartName="/xl/worksheets/sheet${k + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
+    '</Types>') });
+  files.push({ name: '_rels/.rels', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+    '</Relationships>') });
+  files.push({ name: 'xl/workbook.xml', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<sheets>' + names.map((n, k) => `<sheet name="${xmlEsc(n)}" sheetId="${k + 1}" r:id="rId${k + 1}"/>`).join('') + '</sheets></workbook>') });
+  files.push({ name: 'xl/_rels/workbook.xml.rels', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    names.map((_, k) => `<Relationship Id="rId${k + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${k + 1}.xml"/>`).join('') +
+    `<Relationship Id="rId${names.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+    '</Relationships>') });
+  files.push({ name: 'xl/styles.xml', data: enc.encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFEDEFF3"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+    '</styleSheet>') });
+  sheets.forEach((sh, k) => {
+    const hr = sh.headerRows || 0;
+    const out = [];
+    out.push('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">');
+    if (sh.freeze && (sh.freeze.rows || sh.freeze.cols)) {
+      const fr = sh.freeze.rows || 0, fc = sh.freeze.cols || 0;
+      out.push(`<sheetViews><sheetView workbookViewId="0"><pane${fc ? ` xSplit="${fc}"` : ''}${fr ? ` ySplit="${fr}"` : ''} topLeftCell="${colName(fc)}${fr + 1}" activePane="${fr && fc ? 'bottomRight' : fr ? 'bottomLeft' : 'topRight'}" state="frozen"/></sheetView></sheetViews>`);
+    }
+    if (sh.widths) out.push('<cols>' + sh.widths.map((w, c) => `<col min="${c + 1}" max="${c + 1}" width="${w}" customWidth="1"/>`).join('') + '</cols>');
+    out.push('<sheetData>');
+    sh.rows.forEach((row, r) => {
+      const cells = [];
+      row.forEach((v, c) => {
+        if (v === null || v === undefined || v === '') return;
+        const ref = colName(c) + (r + 1);
+        const st = r < hr ? ' s="1"' : '';
+        if (typeof v === 'number') { const s = fmtNum(v); if (s !== null) cells.push(`<c r="${ref}"${st}><v>${s}</v></c>`); }
+        else cells.push(`<c r="${ref}"${st} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`);
+      });
+      out.push(`<row r="${r + 1}">${cells.join('')}</row>`);
+    });
+    out.push('</sheetData></worksheet>');
+    files.push({ name: `xl/worksheets/sheet${k + 1}.xml`, data: enc.encode(out.join('')) });
+  });
+  return zip(files);
+}
+
+function toCSV(rows) {
+  const esc = v => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'number') { const s = fmtNum(v); return s === null ? '' : s; }
+    const s = String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return '﻿' + rows.map(r => r.map(esc).join(',')).join('\r\n');
+}
+
+
+const API = { lstsq, butterLowpass, fillGaps, deriv, interpSeries, crc32, zip, buildXlsx, toCSV, colName };
+if (typeof module !== 'undefined' && module.exports) module.exports = API;
+else root.SLCore = API;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>/* ============================================================
+ * SprintLab: 疾走速度曲線の計算（UI 非依存）
+ *  - マーカーからの距離換算（直線・透視補正・曲線補正）
+ *  - 背景差分による走者の追跡（帯状の範囲・平均シフト）
+ *  - 平滑化・速度・区間タイム・動き出しの検出
+ *  - 指数モデル v(t) = vmax(1 - e^{-t/τ}) と力–速度プロファイル（Samozino 2016）
+ * ============================================================ */
+(function (root) {
+'use strict';
+const C = (typeof module !== 'undefined' && module.exports) ? require('./core.js') : root.SLCore;
+const G = 9.81;
+const fin = v => typeof v === 'number' && isFinite(v);
+const median = a => { const b = Array.from(a).filter(fin).sort((x, y) => x - y); const n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : NaN; };
+
+/* ---------------- 自然3次スプライン ---------------- */
+function natSpline(x, y) {
+  const n = x.length;
+  if (n < 2) return () => (n ? y[0] : 0);
+  if (n === 2) return t => { const w = Math.max(0, Math.min(1, (t - x[0]) / (x[1] - x[0]))); return y[0] + (y[1] - y[0]) * w; };
+  const h = [], al = [0], l = [1], mu = [0], z = [0], c = new Array(n).fill(0), b = [], d = [];
+  for (let i = 0; i < n - 1; i++) h[i] = x[i + 1] - x[i];
+  for (let i = 1; i < n - 1; i++) al[i] = 3 / h[i] * (y[i + 1] - y[i]) - 3 / h[i - 1] * (y[i] - y[i - 1]);
+  for (let i = 1; i < n - 1; i++) { l[i] = 2 * (x[i + 1] - x[i - 1]) - h[i - 1] * mu[i - 1]; mu[i] = h[i] / l[i]; z[i] = (al[i] - h[i - 1] * z[i - 1]) / l[i]; }
+  for (let j = n - 2; j >= 0; j--) { c[j] = (j > 0 ? z[j] : 0) - mu[j] * c[j + 1]; b[j] = (y[j + 1] - y[j]) / h[j] - h[j] * (c[j + 1] + 2 * c[j]) / 3; d[j] = (c[j + 1] - c[j]) / (3 * h[j]); }
+  return t => {
+    if (t <= x[0]) return y[0];
+    if (t >= x[n - 1]) return y[n - 1];
+    let k = 0; while (k < n - 2 && t > x[k + 1]) k++;
+    const dx = t - x[k];
+    return y[k] + b[k] * dx + c[k] * dx * dx + d[k] * dx * dx * dx;
+  };
+}
+
+/* ---------------- 距離換算 ----------------
+ * markers: [{ d: 距離(m), p: [u,v] 手前（または1点）, q: [u,v] 奥（2点のとき） }]
+ * 2点のときは手前と奥の中点（走者が走るレーン中央）を使う。
+ * 画像上の「走路の軸」に沿った座標 s（px）から距離 d（m）への1次元の写像 F を求める。
+ *   直線      : d = a s + b
+ *   透視補正  : d = (a s + b) / (c s + 1)   … カメラが走路に対して斜めでも正確（ピンホールカメラで厳密）
+ *   曲線補正  : 透視補正 + 残差の自然3次スプライン（レンズのゆがみ。マーカー4つ以上）
+ */
+function markerPoint(m) {
+  if (!m || !m.p) return null;
+  if (m.q) return [(m.p[0] + m.q[0]) / 2, (m.p[1] + m.q[1]) / 2];
+  return [m.p[0], m.p[1]];
+}
+function buildMap(markers, method, opts = {}) {
+  const pts = [];
+  for (const m of markers || []) { const P = markerPoint(m); if (P && fin(m.d)) pts.push({ P, d: m.d }); }
+  if (pts.length < 2) return { ok: false, err: '距離の基準には、位置を指定したマーカーが2つ以上必要です' };
+  if (new Set(pts.map(p => p.d)).size < 2) return { ok: false, err: '距離の違うマーカーが2つ以上必要です' };
+  const n = pts.length;
+  let cx = 0, cy = 0; for (const p of pts) { cx += p.P[0]; cy += p.P[1]; } cx /= n; cy /= n;
+  let sxx = 0, sxy = 0, syy = 0; for (const p of pts) { const dx = p.P[0] - cx, dy = p.P[1] - cy; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; }
+  const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  let ux = Math.cos(th), uy = Math.sin(th);
+  const dm = pts.reduce((s, p) => s + p.d, 0) / n;
+  let cov = 0; for (const p of pts) cov += ((p.P[0] - cx) * ux + (p.P[1] - cy) * uy) * (p.d - dm);
+  if (cov < 0) { ux = -ux; uy = -uy; }
+  let nx = uy, ny = -ux; if (ny > 0) { nx = -nx; ny = -ny; } // 画像の上向き
+  const S = (u, v) => (u - cx) * ux + (v - cy) * uy;
+  const Pp = (u, v) => (u - cx) * nx + (v - cy) * ny;
+  const s = pts.map(p => S(p.P[0], p.P[1])), d = pts.map(p => p.d);
+  const order = s.map((_, i) => i).sort((a, b) => s[a] - s[b]);
+  const sS = order.map(i => s[i]), dS = order.map(i => d[i]);
+  const warnings = [];
+  for (let i = 1; i < n; i++) if (dS[i] <= dS[i - 1]) { warnings.push('マーカーの距離の順番と画像上の並びが合っていません。距離の入力を確認してください'); break; }
+  const perp = pts.map(p => Pp(p.P[0], p.P[1]));
+  const straight = Math.sqrt(perp.reduce((a, v) => a + v * v, 0) / n);
+  const sm = s.reduce((a, v) => a + v, 0) / n;
+  const span = Math.max(1, sS[n - 1] - sS[0]);
+  const sc = span / 2;
+  const z = x => (x - sm) / sc;
+  let kind = method || 'auto';
+  if (kind === 'auto') kind = n >= 3 ? 'proj' : 'linear';
+  if (kind === 'spline' && n < 4) { warnings.push('曲線補正にはマーカーが4つ以上必要です。透視補正を使います'); kind = n >= 3 ? 'proj' : 'linear'; }
+  if (kind === 'proj' && n < 3) { warnings.push('透視補正にはマーカーが3つ以上必要です。直線で換算します'); kind = 'linear'; }
+  let base = null, pars = null;
+  const linFit = () => { const p = C.lstsq(s.map(x => [z(x), 1]), d); return { p, f: x => p[0] * z(x) + p[1] }; };
+  if (kind === 'proj' || kind === 'spline') {
+    try {
+      const p = C.lstsq(s.map((x, i) => [z(x), 1, -z(x) * d[i]]), d);
+      const f = x => (p[0] * z(x) + p[1]) / (p[2] * z(x) + 1);
+      // 使う範囲（マーカーの外側に走路の長さの40%まで）で分母が正・単調増加であること
+      let okm = true, prev = -Infinity;
+      for (let k = 0; k <= 200; k++) {
+        const x = sS[0] - 0.4 * span + 1.8 * span * k / 200, den = p[2] * z(x) + 1;
+        const y = f(x);
+        if (!(den > 0.15) || !(y > prev)) { okm = false; break; }
+        prev = y;
+      }
+      if (okm) { base = f; pars = p; }
+      else { warnings.push('透視補正がうまく当てはまりません（マーカーの位置か距離が違う可能性）。直線で換算します'); kind = 'linear'; }
+    } catch (e) { warnings.push('透視補正を計算できません。直線で換算します'); kind = 'linear'; }
+  }
+  if (kind === 'linear') { const L = linFit(); base = L.f; pars = L.p; }
+  const res0 = s.map((x, i) => d[i] - base(x));
+  let corr = null;
+  if (kind === 'spline') { const sp = natSpline(sS, order.map(i => res0[i])); corr = sp; }
+  const F = corr ? (x => base(x) + corr(x)) : base;
+  const residuals = pts.map((p, i) => ({ d: p.d, res: d[i] - F(s[i]), resBase: res0[i] }));
+  const dof = n - (kind === 'linear' ? 2 : 3);
+  const rms = dof > 0 ? Math.sqrt(res0.reduce((a, v) => a + v * v, 0) / n) : null;
+  const dFds = x => (F(x + 0.5) - F(x - 0.5));
+  const scaleAt = x => { const g = dFds(x); return g > 1e-9 ? 1 / g : NaN; }; // px / m
+  const sLo = sS[0] - 3 * span, sHi = sS[n - 1] + 3 * span;
+  const Finv = dd => {
+    let a = sLo, b = sHi;
+    if (!(F(a) < dd)) a = sS[0] - 0.4 * span;
+    if (!(F(b) > dd)) b = sS[n - 1] + 0.4 * span;
+    for (let k = 0; k < 70; k++) { const m = (a + b) / 2; if (F(m) < dd) a = m; else b = m; }
+    return (a + b) / 2;
+  };
+  // 2点だけのときの注意
+  const pairs = (markers || []).filter(m => m.p && m.q).length;
+  if (n === 2) warnings.push('マーカー2つは「カメラが走路に正対している」前提の直線換算です。途中にもマーカー（例：10 m ごと）を置くと、斜めのカメラやレンズのゆがみも補正できます');
+  if (pairs === 0 && !opts.quietPairs) warnings.push('マーカーをレーンの片側だけに置いた場合、走者（レーン中央）との奥行きの差だけ距離がずれます（例：カメラまで 25 m、差 0.6 m で約 2%）。手前と奥の2点入力を推奨します');
+  const pxm = sS.map(x => scaleAt(x));
+  if (straight > 0.02 * span && n >= 3) warnings.push(`マーカーが一直線に並んでいません（ずれ ${straight.toFixed(1)} px）。マーカーの位置を確認してください`);
+  return {
+    ok: true, kind, n, origin: [cx, cy], u: [ux, uy], nrm: [nx, ny], S, Pp, F, Finv, scaleAt,
+    sRange: [sS[0], sS[n - 1]], dRange: [dS[0], dS[n - 1]], residuals, rms, straight, pxPerM: [Math.min(...pxm), Math.max(...pxm)],
+    pars, warnings,
+    toImage: (dd, h) => { const sx = Finv(dd), k = scaleAt(sx); return [cx + sx * ux + (h || 0) * k * nx, cy + sx * uy + (h || 0) * k * ny]; },
+  };
+}
+
+/* ---------------- 追跡する帯（走路の上の長方形を画像に写したもの） ---------------- */
+// opt: { above, below (m), dMin, dMax (m), maxPix }
+function bandGeometry(map, opt, W, H) {
+  const s0 = map.Finv(opt.dMin), s1 = map.Finv(opt.dMax);
+  const NS = 48, samples = [];
+  for (let k = 0; k <= NS; k++) { const s = s0 + (s1 - s0) * k / NS; samples.push({ s, k: map.scaleAt(s) }); }
+  const [cx, cy] = map.origin, [ux, uy] = map.u, [nx, ny] = map.nrm;
+  const top = [], bot = [];
+  for (const q of samples) {
+    const bx = cx + q.s * ux, by = cy + q.s * uy;
+    top.push([bx + nx * opt.above * q.k, by + ny * opt.above * q.k]);
+    bot.push([bx - nx * opt.below * q.k, by - ny * opt.below * q.k]);
+  }
+  const poly = top.concat(bot.slice().reverse());
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of poly) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0)); x1 = Math.min(W, Math.ceil(x1)); y1 = Math.min(H, Math.ceil(y1));
+  const bw = x1 - x0, bh = y1 - y0;
+  if (bw < 8 || bh < 8) return null;
+  const maxPix = opt.maxPix || 900000;
+  const ps = Math.min(1, Math.sqrt(maxPix / (bw * bh)), (opt.maxW || 2400) / bw);
+  const pw = Math.max(8, Math.round(bw * ps)), ph = Math.max(8, Math.round(bh * ps));
+  const sx = pw / bw, sy = ph / bh;
+  const kAt = s => { const t = (s - s0) / (s1 - s0) * NS; const i = Math.max(0, Math.min(NS - 1, Math.floor(t))); const w = Math.max(0, Math.min(1, t - i)); return samples[i].k * (1 - w) + samples[i + 1].k * w; };
+  const binW = 1 / Math.min(sx, sy);
+  const nb = Math.max(1, Math.ceil((s1 - s0) / binW) + 1);
+  const bin = new Int32Array(pw * ph).fill(-1), cover = new Int32Array(nb);
+  let nIn = 0;
+  for (let y = 0; y < ph; y++) {
+    const v = y0 + (y + 0.5) / sy;
+    for (let x = 0; x < pw; x++) {
+      const u = x0 + (x + 0.5) / sx;
+      const s = map.S(u, v);
+      if (s < s0 || s > s1) continue;
+      const p = map.Pp(u, v), k = kAt(s);
+      if (p > opt.above * k || p < -opt.below * k) continue;
+      const b = Math.floor((s - s0) / binW);
+      bin[y * pw + x] = b; cover[b]++; nIn++;
+    }
+  }
+  const cm = median(Array.from(cover).filter(c => c > 0));
+  return { x0, y0, bw, bh, pw, ph, sx, sy, ps: Math.min(sx, sy), s0, s1, binW, nb, bin, cover, coverMed: cm, nIn, poly, kAt, above: opt.above, below: opt.below, dMin: opt.dMin, dMax: opt.dMax };
+}
+const binCenter = (geo, b) => geo.s0 + (b + 0.5) * geo.binW;
+
+/* ---------------- 背景（複数フレームの中央値） ---------------- */
+// stack: K 枚の RGB（Uint8Array, 長さ K*L）、L = pw*ph*3
+function medianBackground(stack, K, L, bin) {
+  const out = new Uint8Array(L), tmp = new Uint8Array(K), half = K >> 1;
+  for (let px = 0, i = 0; i < L; i++) {
+    px = (i / 3) | 0;
+    if (bin && bin[px] < 0) continue;
+    for (let k = 0; k < K; k++) tmp[k] = stack[k * L + i];
+    for (let a = 1; a < K; a++) { const x = tmp[a]; let b = a - 1; while (b >= 0 && tmp[b] > x) { tmp[b + 1] = tmp[b]; b--; } tmp[b + 1] = x; }
+    out[i] = tmp[half];
+  }
+  return out;
+}
+function rgbaToRgb(rgba, n) { const out = new Uint8Array(n * 3); for (let i = 0, j = 0; i < n; i++, j += 4) { out[i * 3] = rgba[j]; out[i * 3 + 1] = rgba[j + 1]; out[i * 3 + 2] = rgba[j + 2]; } return out; }
+
+/* ---------------- 1フレームの前景と、走路方向のヒストグラム ---------------- */
+// prm: { thr, shadow }
+function measureFrame(rgba, bg, geo, prm, wantMask) {
+  const { pw, ph, bin, nb } = geo, N = pw * ph;
+  // 明るさの自動補正（カメラの露出の変化）
+  // 中央値は度数分布で求める（並べ替えより速い）
+  const hmed = (H, scale) => { let tot = 0; for (let i = 0; i < H.length; i++) tot += H[i]; if (!tot) return NaN; let c = 0; for (let i = 0; i < H.length; i++) { c += H[i]; if (c >= tot / 2) return (i + 0.5) / scale; } return NaN; };
+  const HR = new Uint32Array(1024);
+  for (let i = 0; i < N; i += 5) { if (bin[i] < 0) continue; const j = i * 4, k = i * 3; const r = (rgba[j] + rgba[j + 1] + rgba[j + 2] + 6) / (bg[k] + bg[k + 1] + bg[k + 2] + 6); HR[Math.min(1023, (r * 256) | 0)]++; }
+  let gain = hmed(HR, 256); if (!(gain > 0.6 && gain < 1.6)) gain = 1;
+  // ノイズの大きさ
+  const HD = new Uint32Array(256);
+  for (let i = 0; i < N; i += 7) { if (bin[i] < 0) continue; const j = i * 4, k = i * 3; const dd = Math.max(Math.abs(rgba[j] - gain * bg[k]), Math.abs(rgba[j + 1] - gain * bg[k + 1]), Math.abs(rgba[j + 2] - gain * bg[k + 2])); HD[Math.min(255, dd | 0)]++; }
+  const noise = 1.4826 * hmed(HD, 1);
+  const thr = Math.max(prm.thr || 30, 5 * (fin(noise) ? noise : 0));
+  const m = new Uint8Array(N);
+  let nfg = 0;
+  for (let i = 0; i < N; i++) {
+    if (bin[i] < 0) continue;
+    const j = i * 4, k = i * 3;
+    const r = rgba[j], g = rgba[j + 1], b = rgba[j + 2];
+    const R = gain * bg[k], Gg = gain * bg[k + 1], B = gain * bg[k + 2];
+    const dd = Math.max(Math.abs(r - R), Math.abs(g - Gg), Math.abs(b - B));
+    if (dd <= thr) continue;
+    if (prm.shadow) {
+      const li = r + g + b + 1, lb = R + Gg + B + 1, ratio = li / lb;
+      if (lb > 60 && ratio > 0.3 && ratio < 0.93 && Math.abs(r / li - R / lb) < 0.045 && Math.abs(g / li - Gg / lb) < 0.045) continue;
+    }
+    m[i] = 1; nfg++;
+  }
+  // オープニング（孤立した点を消す）：十字の収縮 → 膨張
+  const e = new Uint8Array(N);
+  for (let y = 1; y < ph - 1; y++) for (let x = 1; x < pw - 1; x++) { const i = y * pw + x; if (m[i] && m[i - 1] && m[i + 1] && m[i - pw] && m[i + pw]) e[i] = 1; }
+  const o = new Uint8Array(N);
+  for (let y = 1; y < ph - 1; y++) for (let x = 1; x < pw - 1; x++) { const i = y * pw + x; if (e[i] || e[i - 1] || e[i + 1] || e[i - pw] || e[i + pw]) o[i] = 1; }
+  const cnt = new Float64Array(nb), su = new Float64Array(nb), sv = new Float64Array(nb);
+  let total = 0;
+  for (let y = 0; y < ph; y++) {
+    const v = geo.y0 + (y + 0.5) / geo.sy;
+    for (let x = 0; x < pw; x++) {
+      const i = y * pw + x; if (!o[i]) continue;
+      const b = bin[i]; if (b < 0) continue;
+      cnt[b]++; su[b] += geo.x0 + (x + 0.5) / geo.sx; sv[b] += v; total++;
+    }
+  }
+  return { cnt, su, sv, total, gain, thr, noise, mask: wantMask ? o : null };
+}
+
+/* ---------------- 走者の位置（ガウス窓の平均シフト） ----------------
+ * 窓の中心から離れた画素ほど重みを小さくする（σ = sigM m）。走者の近くにいる他の人に引っ張られにくい。
+ */
+function locate(h, geo, map, pred, halfM, sigM) {
+  const { nb } = geo;
+  sigM = sigM || halfM / 2.4;
+  let c = pred;
+  if (!fin(c)) {
+    // 全体から探す：走者の幅くらいの箱でならして最大の位置
+    const k = geo.kAt((geo.s0 + geo.s1) / 2), w = Math.max(1, Math.round(0.8 * k / geo.binW));
+    let best = -1, bv = 0, run = 0;
+    for (let b = 0; b < nb; b++) { run += h.cnt[b]; if (b - w >= 0) run -= h.cnt[b - w]; if (run > bv) { bv = run; best = b - (w >> 1); } }
+    if (best < 0) return null;
+    c = binCenter(geo, Math.max(0, best));
+  }
+  let res = null;
+  for (let it = 0; it < 25; it++) {
+    const k = geo.kAt(c), hw = halfM * k, sg = sigM * k;
+    const lo = Math.max(0, Math.floor((c - hw - geo.s0) / geo.binW)), hi = Math.min(nb - 1, Math.floor((c + hw - geo.s0) / geo.binW));
+    let n = 0, wn = 0, U = 0, Vv = 0;
+    for (let b = lo; b <= hi; b++) { const cb = h.cnt[b]; if (!cb) continue; const z = (binCenter(geo, b) - c) / sg, g = Math.exp(-0.5 * z * z); n += cb; wn += g * cb; U += g * h.su[b]; Vv += g * h.sv[b]; }
+    if (wn <= 0) { res = { s: c, u: NaN, v: NaN, count: 0, lo, hi }; break; }
+    const u = U / wn, v = Vv / wn, s = map.S(u, v);
+    res = { s, u, v, count: n, lo, hi };
+    if (Math.abs(s - c) < 0.15) break;
+    c = s;
+  }
+  // 窓が帯の端・画面の外にかかっていないか（かかると中心が内側にずれる）
+  if (res) {
+    const lim = 0.5 * geo.coverMed;
+    let edge = false;
+    const k = geo.kAt(res.s), hwE = Math.min(halfM, 2 * sigM) * k;
+    const lo = Math.max(0, Math.floor((res.s - hwE - geo.s0) / geo.binW)), hi = Math.min(nb - 1, Math.floor((res.s + hwE - geo.s0) / geo.binW));
+    for (let b = lo; b <= hi; b++) if (geo.cover[b] < lim) { edge = true; break; }
+    if (res.s - hwE < geo.s0 || res.s + hwE > geo.s1) edge = true;
+    res.edge = edge;
+  }
+  return res;
+}
+
+function createTracker(geo, map, opts = {}) {
+  return { geo, map, halfM: opts.halfM || 1.1, sigM: opts.sigM || 0.45, init: fin(opts.init) ? opts.init : null, last: [], counts: [], lost: 0, ended: false, minArea: opts.minArea || 0.12 };
+}
+// 1フレーム分。戻り値：{ s, u, v, count, edge, ok }（見つからなければ ok=false）
+function trackStep(T, h, f) {
+  const { geo, map } = T;
+  let pred = null, vel = 0;
+  if (T.last.length) {
+    const L = T.last, a = L[L.length - 1];
+    if (L.length >= 2) { const b = L[Math.max(0, L.length - 5)]; vel = (a.s - b.s) / Math.max(1, a.f - b.f); }
+    pred = a.s + vel * (f - a.f);
+  } else if (fin(T.init)) pred = T.init;
+  const global = !fin(pred) || T.lost > 20;
+  const m = locate(h, geo, map, global ? null : pred, T.halfM, T.sigM);
+  if (!m || !(m.count > 0)) { T.lost++; return { ok: false, pred }; }
+  const k = geo.kAt(m.s), minAbs = T.minArea * (k * geo.ps) * (k * geo.ps);
+  const med = median(T.counts);
+  let ok = m.count >= minAbs && (T.counts.length < 5 || m.count >= 0.3 * med);
+  if (ok && !global && fin(pred) && Math.abs(m.s - pred) > 0.9 * k) ok = false;
+  if (ok && global && T.last.length) { const a = T.last[T.last.length - 1]; if (m.s < a.s - 1.5 * k) ok = false; } // 後ろへ飛ばない
+  m.ok = ok && !m.edge; m.pred = pred;
+  if (ok) {
+    T.lost = 0;
+    if (!m.edge) { T.last.push({ s: m.s, f }); if (T.last.length > 8) T.last.shift(); T.counts.push(m.count); if (T.counts.length > 40) T.counts.shift(); }
+    else { T.last.push({ s: m.s, f }); if (T.last.length > 8) T.last.shift(); }
+    // 帯の終わりを越えたら終了
+    if (m.edge && m.s > geo.s0 + 0.6 * (geo.s1 - geo.s0) && vel > 0) T.edgeRun = (T.edgeRun || 0) + 1; else T.edgeRun = 0;
+    if (T.edgeRun > 6) T.ended = true;
+  } else {
+    T.lost++;
+    if (fin(pred) && pred > geo.s1 + 0.3 * k) T.ended = true;
+  }
+  return m;
+}
+
+/* ---------------- 他の人・物との重なりの補正（追跡の2回目） ----------------
+ * 走者が離れた場所にいたコマ（前後）の前景ヒストグラムから、走者以外の前景を推定して差し引き、
+ * 走者の中心を求め直す。hists: Map(frame → Uint16Array)、d: { u, v, flag }。
+ * 戻り値：{ corrected, rejected }（d を直接書き換える。補正したコマは flag = 5、使えないコマは 4）
+ */
+function refineOverlaps(hists, d, geo, map, fs, opts = {}) {
+  const halfM = opts.halfM || 1.1;
+  const frames = [...hists.keys()].sort((a, b) => a - b);
+  const S = new Map();
+  for (const j of frames) if (d.flag[j] === 1) S.set(j, map.S(d.u[j], d.v[j]));
+  if (S.size < 10) return { corrected: 0, rejected: 0 };
+  const binOf = s => Math.floor((s - geo.s0) / geo.binW);
+  const winSum = (h, s, hw) => { let n = 0; for (let b = Math.max(0, binOf(s - hw)); b <= Math.min(geo.nb - 1, binOf(s + hw)); b++) n += h[b]; return n; };
+  const med = median([...S.entries()].map(([j, s]) => winSum(hists.get(j), s, halfM * geo.kAt(s))));
+  const maxDt = Math.round(1.5 * fs);
+  const keys = [...S.keys()];
+  const upd = [];
+  let corrected = 0, rejected = 0;
+  for (let n = 0; n < keys.length; n++) {
+    const j = keys[n], sj = S.get(j), k = geo.kAt(sj), hw = halfM * k, sep = (2 * halfM + 0.4) * k;
+    let a = null, b = null;
+    for (let m = n - 1; m >= 0 && j - keys[m] <= maxDt; m--) if (Math.abs(S.get(keys[m]) - sj) > sep) { a = keys[m]; break; }
+    for (let m = n + 1; m < keys.length && keys[m] - j <= maxDt; m++) if (Math.abs(S.get(keys[m]) - sj) > sep) { b = keys[m]; break; }
+    if (a === null && b === null) continue;
+    const lo = Math.max(0, binOf(sj - hw - 0.6 * k)), hi = Math.min(geo.nb - 1, binOf(sj + hw + 0.6 * k));
+    const Hj = hists.get(j);
+    // 前後のコマの「走者以外」の前景（走者のまわり ±1.3 m を除く）
+    const otherOf = f => { if (f === null) return null; const H = hists.get(f), sf = S.get(f), kf = geo.kAt(sf), o = new Float64Array(geo.nb); for (let q = 0; q < geo.nb; q++) { const sb = geo.s0 + (q + 0.5) * geo.binW; if (Math.abs(sb - sf) > 1.3 * kf) o[q] = H[q]; } return o; };
+    const Oa = otherOf(a), Ob = otherOf(b);
+    const wa = a !== null && b !== null ? (b - j) / (b - a) : a !== null ? 1 : 0, wb = 1 - wa;
+    // 他の人が動いている分（前→後のずれ）を相互相関で求め、現在のコマの位置に合わせる
+    let shA = 0, shB = 0;
+    if (Oa && Ob) {
+      const r0 = Math.max(0, binOf(sj - hw - 2 * k)), r1 = Math.min(geo.nb - 1, binOf(sj + hw + 2 * k));
+      const D = Math.ceil(3.0 * k * (b - a) / fs / geo.binW);
+      let best = 0, bv = 0;
+      for (let dl = -D; dl <= D; dl++) { let c = 0; for (let q = r0; q <= r1; q++) { const q2 = q + dl; if (q2 >= 0 && q2 < geo.nb) c += Oa[q] * Ob[q2]; } if (c > bv) { bv = c; best = dl; } }
+      shA = Math.round(best * (j - a) / (b - a)); shB = Math.round(-best * (b - j) / (b - a));
+    }
+    const est = new Float64Array(hi - lo + 1);
+    let other = 0;
+    for (let q = lo; q <= hi; q++) {
+      const qa = q - shA, qb = q - shB;
+      const e = (Oa && qa >= 0 && qa < geo.nb ? wa * Oa[qa] : 0) + (Ob && qb >= 0 && qb < geo.nb ? wb * Ob[qb] : 0);
+      est[q - lo] = e; const sb = geo.s0 + (q + 0.5) * geo.binW; if (Math.abs(sb - sj) <= hw) other += e;
+    }
+    if (other < 0.08 * med) continue;
+    const sg = (opts.sigM || 0.45) * k;
+    const cen = (c, sub) => { let num = 0, den = 0, raw = 0; for (let q = Math.max(lo, binOf(c - hw)); q <= Math.min(hi, binOf(c + hw)); q++) { const sb = geo.s0 + (q + 0.5) * geo.binW; const w = sub ? Math.max(0, Hj[q] - 1.15 * est[q - lo]) : Hj[q]; const z = (sb - c) / sg, g = Math.exp(-0.5 * z * z); num += g * w * sb; den += g * w; raw += w; } return { c: den > 0 ? num / den : c, den: raw }; };
+    const c0 = cen(sj, false).c;
+    let c = c0, r = null;
+    for (let it = 0; it < 25; it++) { r = cen(c, true); if (Math.abs(r.c - c) < 0.1) { c = r.c; break; } c = r.c; }
+    let c00 = c0; for (let it = 0; it < 25; it++) { const q = cen(c00, false).c; if (Math.abs(q - c00) < 0.1) { c00 = q; break; } c00 = q; }
+    if (!r || r.den < 0.4 * med || Math.abs(c - c00) > 0.9 * k) { upd.push([j, null]); rejected++; continue; }
+    if (Math.abs(c - c00) < 0.01 * k) continue;
+    upd.push([j, sj + (c - c00)]); corrected++;
+  }
+  const [ux, uy] = map.u;
+  for (const [j, sNew] of upd) {
+    if (sNew === null) { d.flag[j] = 4; continue; }
+    const ds = sNew - S.get(j); d.u[j] += ds * ux; d.v[j] += ds * uy; d.flag[j] = 5;
+  }
+  return { corrected, rejected, med };
+}
+
+/* 欠損の補間（3次エルミート：両側 0.1 秒の傾きを使い、速度が途切れないように） */
+function fillGapsCubic(x, maxGap, fs) {
+  const y = Float64Array.from(x), n = y.length, w = Math.max(3, Math.round(0.1 * fs));
+  const slope = (i0, i1) => { const t = [], v = []; for (let i = i0; i <= i1; i++) if (i >= 0 && i < n && isFinite(x[i])) { t.push(i); v.push(x[i]); } if (t.length < 2) return null; const mt = t.reduce((a, b) => a + b, 0) / t.length, mv = v.reduce((a, b) => a + b, 0) / v.length; let sxx = 0, sxy = 0; for (let k = 0; k < t.length; k++) { sxx += (t[k] - mt) ** 2; sxy += (t[k] - mt) * (v[k] - mv); } return sxx > 0 ? sxy / sxx : null; };
+  let i = 0;
+  while (i < n) {
+    if (isFinite(y[i])) { i++; continue; }
+    let j = i; while (j < n && !isFinite(y[j])) j++;
+    const gap = j - i;
+    if (i > 0 && j < n && gap <= maxGap) {
+      const a = i - 1, b = j, ya = x[a], yb = x[b], L = b - a;
+      let ma = slope(a - w + 1, a), mb = slope(b, b + w - 1);
+      const lin = (yb - ya) / L; if (ma === null) ma = lin; if (mb === null) mb = lin;
+      for (let k = i; k < j; k++) { const t = (k - a) / L, t2 = t * t, t3 = t2 * t; y[k] = (2 * t3 - 3 * t2 + 1) * ya + (t3 - 2 * t2 + t) * L * ma + (-2 * t3 + 3 * t2) * yb + (t3 - t2) * L * mb; }
+    }
+    i = j;
+  }
+  return y;
+}
+
+/* ---------------- 動き出しの検出 ---------------- */
+// x6: 弱く平滑化した位置（m）、raw: 生の位置、fs: Hz。静止 → 走り出しを仮定
+function detectOnset(x6, raw, fs) {
+  const n = x6.length;
+  let i0 = 0; while (i0 < n && !fin(x6[i0])) i0++;
+  if (i0 >= n - 3) return { fromRest: false };
+  const w0 = Math.max(3, Math.round(0.25 * fs));
+  let base = median(x6.slice(i0, i0 + w0));
+  let i15 = -1;
+  for (let i = i0; i < n - 3; i++) if (fin(x6[i]) && x6[i] - base > 0.15 && x6[i + 1] - base > 0.15 && x6[i + 2] - base > 0.15) { i15 = i; break; }
+  if (i15 < 0) return { fromRest: false, base };
+  if (i15 - i0 < Math.round(0.12 * fs)) return { fromRest: false, base, i15 };
+  const iEnd = i15 - Math.round(0.3 * fs);
+  let sigma = 0.01;
+  if (iEnd - i0 >= 3) {
+    base = median(raw.slice(i0, iEnd + 1));
+    const dev = []; for (let i = i0; i <= iEnd; i++) if (fin(raw[i]) && fin(x6[i])) dev.push(Math.abs(raw[i] - x6[i]));
+    if (dev.length >= 3) sigma = 1.4826 * median(dev);
+  }
+  const thr = Math.max(0.02, 3 * sigma);
+  let j = i15; while (j > i0 && fin(x6[j]) && x6[j] - base > thr) j--;
+  let tThr = j; if (fin(x6[j]) && fin(x6[j + 1]) && x6[j + 1] !== x6[j]) tThr = j + (base + thr - x6[j]) / (x6[j + 1] - x6[j]);
+  // 動き出し直後は等加速度とみなし、√(変位) と時間の直線回帰で 0 点を求める
+  const xs = [], ys = [];
+  for (let i = Math.ceil(tThr); i < n; i++) {
+    const r = fin(raw[i]) ? raw[i] : x6[i]; if (!fin(r)) continue;
+    const dsp = r - base; if (dsp > 0.4) break;
+    if (dsp > thr * 0.5) { xs.push(i); ys.push(Math.sqrt(dsp)); }
+  }
+  let onset = tThr - 0.04 * fs, method = 'threshold';
+  if (xs.length >= 4) {
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+    let sxx = 0, sxy = 0; for (let k = 0; k < xs.length; k++) { sxx += (xs[k] - mx) ** 2; sxy += (xs[k] - mx) * (ys[k] - my); }
+    const b = sxy / sxx, a = my - b * mx;
+    if (b > 0) { const t0 = -a / b; if (t0 > tThr - 0.3 * fs && t0 <= tThr + 1) { onset = t0; method = 'sqrt-fit'; } }
+  }
+  onset = Math.max(i0, Math.min(tThr, onset));
+  return { fromRest: true, onset, base, sigma, thr, tThr, method };
+}
+
+/* ---------------- 指数モデルの当てはめ ---------------- */
+// x(t) = x0 + vmax·(Δ − τ(1 − e^{−Δ/τ})), Δ = t − t0 (≥0)
+const modelX = (t, p, x0) => { const d = t - p[2]; if (d <= 0) return x0; return x0 + p[0] * (d - p[1] * (1 - Math.exp(-d / p[1]))); };
+const modelV = (t, p) => { const d = t - p[2]; return d <= 0 ? 0 : p[0] * (1 - Math.exp(-d / p[1])); };
+const modelA = (t, p) => { const d = t - p[2]; return d < 0 ? 0 : p[0] / p[1] * Math.exp(-d / p[1]); };
+function fitModel(t, x, x0, init, bounds) {
+  const idx = []; for (let i = 0; i < t.length; i++) if (fin(t[i]) && fin(x[i])) idx.push(i);
+  if (idx.length < 10) return null;
+  let p = init.slice();
+  const lo = bounds[0], hi = bounds[1];
+  const clampP = q => q.map((v, k) => Math.max(lo[k], Math.min(hi[k], v)));
+  const resid = q => idx.map(i => x[i] - modelX(t[i], q, x0));
+  const sse = r => r.reduce((a, v) => a + v * v, 0);
+  let r = resid(p), E = sse(r), lam = 1e-2;
+  for (let it = 0; it < 200; it++) {
+    const J = idx.map(() => [0, 0, 0]);
+    for (let k = 0; k < 3; k++) {
+      const h = [1e-4, 1e-4, 1e-4][k] * Math.max(1, Math.abs(p[k]));
+      const pa = p.slice(), pb = p.slice(); pa[k] += h; pb[k] -= h;
+      idx.forEach((i, m) => { J[m][k] = (modelX(t[i], pa, x0) - modelX(t[i], pb, x0)) / (2 * h); });
+    }
+    const A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], g = [0, 0, 0];
+    J.forEach((row, m) => { for (let a = 0; a < 3; a++) { g[a] += row[a] * r[m]; for (let b = 0; b < 3; b++) A[a][b] += row[a] * row[b]; } });
+    let improved = false;
+    for (let tries = 0; tries < 12; tries++) {
+      const M = A.map((row, a) => row.map((v, b) => v + (a === b ? lam * (A[a][a] + 1e-9) : 0)));
+      let dp; try { dp = C.lstsq(M, g); } catch (e) { lam *= 10; continue; }
+      const q = clampP(p.map((v, k) => v + dp[k]));
+      const rq = resid(q), Eq = sse(rq);
+      if (Eq < E) { const rel = (E - Eq) / Math.max(E, 1e-12); p = q; r = rq; E = Eq; lam = Math.max(1e-7, lam / 3); improved = true; if (rel < 1e-10) it = 1e9; break; }
+      lam *= 4;
+    }
+    if (!improved) break;
+  }
+  const n = idx.length, mean = idx.reduce((a, i) => a + x[i], 0) / n;
+  const sst = idx.reduce((a, i) => a + (x[i] - mean) ** 2, 0);
+  return { vmax: p[0], tau: p[1], t0: p[2], p, rmse: Math.sqrt(E / n), r2: 1 - E / sst, n };
+}
+
+/* 力–速度プロファイル（Samozino et al. 2016 の簡便法） */
+function fvProfile(vmax, tau, tEnd, ath) {
+  const m = ath.mass, h = ath.height;
+  if (!(m > 0) || !(h > 0) || !(vmax > 0) || !(tau > 0)) return null;
+  const T = fin(ath.temp) ? ath.temp : 20, Pb = fin(ath.press) ? ath.press : 760, w = fin(ath.wind) ? ath.wind : 0;
+  const rho = 1.293 * (Pb / 760) * (273 / (273 + T));
+  const Af = (0.2025 * Math.pow(h, 0.725) * Math.pow(m, 0.425)) * 0.266;
+  const k = 0.5 * rho * Af * 0.9;
+  const ts = [], vs = [], Fs = [], Ps = [], RFs = [], vRF = [];
+  const tE = Math.max(1, Math.min(tEnd || 6 * tau, 8));
+  for (let t = 0; t <= tE + 1e-9; t += 0.01) {
+    const v = vmax * (1 - Math.exp(-t / tau)), a = vmax / tau * Math.exp(-t / tau);
+    const rel = v - w, F = m * a + k * rel * Math.abs(rel), P = F * v;
+    ts.push(t); vs.push(v); Fs.push(F); Ps.push(P);
+    if (t >= 0.3 - 1e-9) { RFs.push(F / Math.hypot(F, m * G)); vRF.push(v); }
+  }
+  const reg = (x, y) => { const n = x.length, mx = x.reduce((a, b) => a + b, 0) / n, my = y.reduce((a, b) => a + b, 0) / n; let sxx = 0, sxy = 0; for (let i = 0; i < n; i++) { sxx += (x[i] - mx) ** 2; sxy += (x[i] - mx) * (y[i] - my); } const b = sxy / sxx; return { b, a: my - b * mx }; };
+  const R = reg(vs, Fs);
+  const F0 = R.a, V0 = -R.a / R.b, Pmax = F0 * V0 / 4;
+  const RR = RFs.length >= 3 ? reg(vRF, RFs) : null;
+  return {
+    k, rho, Af, F0, V0, Pmax, F0kg: F0 / m, Pmaxkg: Pmax / m, Sfv: R.b / m, PmaxObs: Math.max(...Ps) / m,
+    RFmax: RFs.length ? Math.max(...RFs) * 100 : NaN, DRF: RR ? RR.b * 100 : NaN, curve: { t: ts, v: vs, F: Fs, P: Ps },
+  };
+}
+
+/* ---------------- 解析本体 ----------------
+ * inp = { pos: Float64Array(N) 生の距離 m（NaN=なし）, flag: Uint8Array(N) 0なし 1自動 2手動 3除外, fps（撮影）, frames: f0,
+ *         cutoff, cutoff6, tref: { mode: 'auto'|'onset'|'signal'|'line', signal: frame|null, onset: frame|null },
+ *         splitStep, goal, athlete, model: true }
+ */
+function analyze(inp) {
+  const N = inp.pos.length, fs = inp.fps, dt = 1 / fs;
+  const raw = Float64Array.from(inp.pos);
+  const flag = inp.flag || new Uint8Array(N).fill(1);
+  const notes = [];
+  // 外れ値（自動の点のみ）
+  const hw = Math.max(2, Math.round(0.08 * fs));
+  const runMed = new Float64Array(N).fill(NaN);
+  for (let i = 0; i < N; i++) { if (!fin(raw[i])) continue; const w = []; for (let j = Math.max(0, i - hw); j <= Math.min(N - 1, i + hw); j++) if (fin(raw[j])) w.push(raw[j]); runMed[i] = median(w); }
+  const dev = []; for (let i = 0; i < N; i++) if (fin(raw[i])) dev.push(Math.abs(raw[i] - runMed[i]));
+  const mad = 1.4826 * median(dev);
+  let nOut = 0;
+  for (let i = 0; i < N; i++) if (fin(raw[i]) && flag[i] === 1 && Math.abs(raw[i] - runMed[i]) > Math.max(0.25, 6 * mad)) { raw[i] = NaN; nOut++; }
+  if (nOut) notes.push(`外れ値として ${nOut} コマを除きました`);
+  const maxGap = Math.max(2, Math.round(0.6 * fs));
+  const filled = fillGapsCubic(raw, maxGap, fs);
+  const nGap = Array.from(filled).filter((v, i) => fin(v) && !fin(raw[i])).length;
+  const xf = C.butterLowpass(filled, fs, inp.cutoff);
+  const x6 = C.butterLowpass(filled, fs, inp.cutoff6 || 6);
+  const v = C.deriv(xf, dt), a = C.deriv(C.butterLowpass(v, fs, inp.cutoff), dt), v6 = C.deriv(x6, dt);  // 加速度は速度をもう一度平滑化してから微分
+  let i0 = 0; while (i0 < N && !fin(xf[i0])) i0++;
+  let i1 = N - 1; while (i1 >= 0 && !fin(xf[i1])) i1--;
+  if (i1 - i0 < 5) return { ok: false, err: '追跡された位置が少なすぎます' };
+  // 動き出し（変位から）と、走り始めの速さ
+  const on = detectOnset(x6, raw, fs);
+  const w0 = []; for (let i = i0; i < Math.min(i1, i0 + Math.round(0.2 * fs)); i++) if (fin(v6[i])) w0.push(Math.abs(v6[i]));
+  const vStart = median(w0);
+  const fromRest = !!on.fromRest && vStart < 0.6;
+  const manOn = fin(inp.tref && inp.tref.onset) ? inp.tref.onset - inp.f0 : null;
+  // 最高速度（データのある範囲）
+  let vmax = -Infinity, iv = -1;
+  for (let i = i0; i <= i1; i++) if (fin(v[i]) && fin(filled[i]) && v[i] > vmax) { vmax = v[i]; iv = i; }
+  // 指数モデル（時間はフレーム番号 × dt の絶対時間で当てはめる）
+  let model = null, fv = null;
+  if (inp.model !== false && fromRest) {
+    const det = fin(manOn) ? manOn : on.onset;
+    let iEnd = i1;
+    if (iv >= 0) { for (let i = iv; i <= i1; i++) if (v[i] < 0.97 * vmax) { iEnd = Math.min(i1, i + Math.round(0.1 * fs)); break; } }
+    const iS = Math.max(i0, Math.floor(det - 0.3 * fs));
+    const tA = new Float64Array(N).fill(NaN), xA = new Float64Array(N).fill(NaN);
+    for (let i = iS; i <= iEnd; i++) if (fin(raw[i])) { tA[i] = i * dt; xA[i] = raw[i]; }
+    const tFit = (iEnd - det) * dt;
+    if (tFit >= 1.2) {
+      const tau0 = Math.max(0.4, Math.min(2.5, tFit / 3)), tOn = det * dt;
+      const fit = fitModel(tA, xA, on.base, [Math.max(3, vmax * 1.02), tau0, tOn], [[1, 0.2, tOn - 0.4], [15, 4, tOn + 0.4]]);
+      if (fit && fit.vmax > 0) {
+        model = Object.assign(fit, { x0: on.base, t0abs: fit.t0, iS, iEnd, amax: fit.vmax / fit.tau, dEnd: xf[iEnd] });
+        if (fit.rmse > 0.08) notes.push(`モデルの当てはまりが良くありません（誤差 ${(fit.rmse * 100).toFixed(0)} cm）。全力疾走をスタートから撮った映像でないと参考になりません`);
+        if (inp.athlete) fv = fvProfile(fit.vmax, fit.tau, (iEnd * dt - fit.t0), inp.athlete);
+      }
+    } else notes.push('動き出しから最高速度付近までが 1.2 秒より短いため、モデルの当てはめを省きました');
+  } else if (!fromRest) notes.push('静止した状態から写っていないため（加速走など）、動き出しとモデルは求めません');
+  let onsetIdx = null, onsetSrc = null;
+  if (fin(manOn)) { onsetIdx = manOn; onsetSrc = 'manual'; }
+  else if (model && model.rmse <= 0.08 && Math.abs(model.t0abs / dt - on.onset) < 0.3 * fs) { onsetIdx = model.t0abs / dt; onsetSrc = 'model'; }
+  else if (fromRest) { onsetIdx = on.onset; onsetSrc = 'disp'; }
+  // 0 m の通過
+  const cross = (arr, d, from) => { for (let i = Math.max(1, from || 1); i < N; i++) if (fin(arr[i - 1]) && fin(arr[i]) && arr[i - 1] < d && arr[i] >= d) return i - 1 + (d - arr[i - 1]) / (arr[i] - arr[i - 1]); return null; };
+  const line0 = cross(x6, 0, i0 + 1);
+  // 時間の基準
+  let mode = (inp.tref && inp.tref.mode) || 'auto';
+  const sig = inp.tref && fin(inp.tref.signal) ? inp.tref.signal - inp.f0 : null;
+  if (mode === 'auto') mode = fin(onsetIdx) ? 'onset' : fin(line0) ? 'line' : 'video';
+  if (mode === 'signal' && !fin(sig)) { notes.push('合図のフレームが未設定のため、動き出しを基準にしました'); mode = fin(onsetIdx) ? 'onset' : 'line'; }
+  if (mode === 'onset' && !fin(onsetIdx)) { notes.push('動き出しが見つからないため、0 m の通過を基準にしました'); mode = fin(line0) ? 'line' : 'video'; }
+  if (mode === 'line' && !fin(line0)) mode = 'video';
+  const refIdx = mode === 'onset' ? onsetIdx : mode === 'signal' ? sig : mode === 'line' ? line0 : 0;
+  const t = new Float64Array(N); for (let i = 0; i < N; i++) t[i] = (i - refIdx) * dt;
+  if (model) { model.t0 = model.t0abs - refIdx * dt; model.p = [model.vmax, model.tau, model.t0]; model.tStart = (model.iS - refIdx) * dt; model.tEnd = (model.iEnd - refIdx) * dt; }
+  // 区間タイム（弱い平滑化の位置で通過時刻を求める）
+  const startFrom = fin(onsetIdx) ? Math.floor(onsetIdx) : i0;
+  const step = inp.splitStep || 10, goal = inp.goal;
+  const dists = [];
+  const xMax = Math.max(...Array.from(x6).filter(fin));
+  for (let d = step; d <= xMax + 1e-9; d += step) dists.push(Math.round(d * 1000) / 1000);
+  if (fin(goal) && goal > 0 && goal <= xMax + 1e-9 && !dists.some(d => Math.abs(d - goal) < 1e-6)) { dists.push(goal); dists.sort((p, q) => p - q); }
+  const splits = [];
+  let prevT = 0, prevD = 0, prevOk = mode !== 'video';
+  for (const d of dists) {
+    const ci = cross(x6, d, Math.max(1, startFrom));
+    if (!fin(ci)) { splits.push({ d, t: null }); prevOk = false; continue; }
+    const tt = (ci - refIdx) * dt;
+    const seg = prevOk ? tt - prevT : null;
+    splits.push({ d, t: tt, seg, segV: seg ? (d - prevD) / seg : null, from: prevD, v: interpAt(v, ci), idx: ci });
+    prevT = tt; prevD = d; prevOk = true;
+  }
+  const goalSplit = fin(goal) ? splits.find(s => Math.abs(s.d - goal) < 1e-6) : null;
+  // 最高速度の 95% 以上の区間
+  let d95 = null;
+  if (iv >= 0) { let a0 = iv, a1 = iv; while (a0 > i0 && v[a0 - 1] >= 0.95 * vmax) a0--; while (a1 < i1 && v[a1 + 1] >= 0.95 * vmax) a1++; d95 = [xf[a0], xf[a1]]; }
+  const vModel = new Float64Array(N).fill(NaN);
+  if (model) for (let i = 0; i < N; i++) vModel[i] = modelV(t[i], model.p);
+  const reaction = fin(sig) && fin(onsetIdx) ? (onsetIdx - sig) * dt : null;
+  return {
+    ok: true, N, dt, fs, t, raw, filled, xf, x6, v, a, v6, vModel, flag, i0, i1, refIdx, mode, onsetIdx, onset: on, fromRest, line0, signalIdx: sig,
+    reaction, splits, vmax, ivmax: iv, onsetSrc, vStart, xAtVmax: iv >= 0 ? xf[iv] : NaN, tAtVmax: iv >= 0 ? t[iv] : NaN, d95, goalSplit, model, fv, notes, nOut, nGap, mad,
+  };
+}
+function interpAt(arr, x) { const i = Math.floor(x), w = x - i; if (!fin(arr[i])) return arr[i + 1]; if (!fin(arr[i + 1])) return arr[i]; return arr[i] * (1 - w) + arr[i + 1] * w; }
+
+/* 距離ごとの値（Excel 用）：位置が単調に増える区間で d ごとの時刻・速度 */
+function byDistance(res, stepM, from) {
+  const out = [], x = res.xf, N = res.N;
+  const st = Math.max(1, Math.floor(from ?? (fin(res.onsetIdx) ? res.onsetIdx : res.i0)));
+  const xs = Array.from(x).filter(fin); if (!xs.length) return out;
+  const dMax = Math.max(...xs);
+  let i = st;
+  for (let d = 0; d <= dMax + 1e-9; d = Math.round((d + stepM) * 1e6) / 1e6) {
+    let j = i; while (j < N && !(fin(x[j - 1]) && fin(x[j]) && x[j - 1] < d && x[j] >= d)) j++;
+    if (j >= N) continue;
+    i = j;
+    const ci = j - 1 + (d - x[j - 1]) / (x[j] - x[j - 1]);
+    out.push({ d, t: (ci - res.refIdx) * res.dt, v: interpAt(res.v, ci), vModel: interpAt(res.vModel, ci), a: interpAt(res.a, ci), idx: ci });
+  }
+  return out;
+}
+
+/* ---------------- 音（合図）の検出 ---------------- */
+// ch: Float32Array（1ch）。win 秒ごとの最大振幅から、最大の立ち上がりを探す
+function audioOnset(ch, sr, opts = {}) {
+  const win = Math.max(1, Math.round((opts.win || 0.002) * sr));
+  const nW = Math.floor(ch.length / win), env = new Float32Array(nW);
+  for (let k = 0; k < nW; k++) { let m = 0; const o = k * win; for (let i = 0; i < win; i++) { const a = Math.abs(ch[o + i]); if (a > m) m = a; } env[k] = m; }
+  const a0 = Math.max(0, Math.floor((opts.t0 || 0) * sr / win)), a1 = Math.min(nW - 1, opts.t1 ? Math.ceil(opts.t1 * sr / win) : nW - 1);
+  let kp = -1, pk = 0; for (let k = a0; k <= a1; k++) if (env[k] > pk) { pk = env[k]; kp = k; }
+  if (kp < 0) return null;
+  const noise = median(Array.from(env.subarray(a0, a1 + 1)));
+  if (!(pk > 4 * noise + 1e-4)) return { env, win: win / sr, peak: pk, noise, t: null, weak: true };
+  let k = kp; const lim = noise + 0.2 * (pk - noise);
+  while (k > a0 && kp - k < Math.round(0.08 / (win / sr)) && env[k - 1] > lim) k--;
+  return { env, win: win / sr, peak: pk, noise, t: k * win / sr, snr: pk / Math.max(noise, 1e-6) };
+}
+
+const API = { refineOverlaps, fillGapsCubic, natSpline, markerPoint, buildMap, bandGeometry, medianBackground, rgbaToRgb, measureFrame, locate, createTracker, trackStep, detectOnset, modelX, modelV, modelA, fitModel, fvProfile, analyze, byDistance, audioOnset, median };
+if (typeof module !== 'undefined' && module.exports) module.exports = API;
+else root.SL = API;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>(() => {
+'use strict';
+const C = window.SLCore, SL = window.SL;
+const $ = id => document.getElementById(id);
+const APP_VERSION = '1.0.0';
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const fin = v => typeof v === 'number' && isFinite(v);
+const fmt = (v, d = 2) => fin(v) ? Number(v).toFixed(d) : '—';
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function toast(msg, ms = 2800) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms); }
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k === 'style') e.style.cssText = v; else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids) if (c != null) e.append(c);
+  return e;
+}
+const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; };
+const toB64 = a => { const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+const fromB64 = (b, T) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new T(u.buffer); };
+const readText = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(f); });
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 保存できない環境 */ } } };
+
+/* ---------- 保存 ---------- */
+let dlP = null;
+const getDl = () => { if (!window.claude || typeof window.claude.use !== 'function') return Promise.resolve(null); if (!dlP) dlP = Promise.resolve().then(() => window.claude.use('downloads')).catch(() => null); return dlP; };
+async function saveFile(name, data, mime) {
+  const blob = data instanceof Blob ? data : new Blob([data], { type: mime || 'application/octet-stream' });
+  const dl = await getDl();
+  if (dl) { try { await dl.save({ filename: name, data: blob }); toast(`保存しました：${name}`); return; } catch (e) { if (e && e.code === 'declined') { toast('保存をキャンセルしました'); return; } } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000); toast(`保存しました：${name}`);
+}
+
+/* ---------- 状態 ---------- */
+const cam = { video: null, url: null, file: null, fileName: '', w: 0, h: 0, dur: 0, fpsFile: 30, fpsCap: 30, fpsCapSet: false, n: 0, frame: 0, shown: -1, q: { busy: false, want: null } };
+const st = {
+  mk: { pair: true, rows: [{ d: 0, p: null, q: null }, { d: 30, p: null, q: null }], method: 'auto' },
+  band: { above: 2.4, below: 0.4, before: 3, after: 6 },
+  trk: { thr: 30, shadow: true, bg: 'median', bgFrame: null, every: 0, init: null },
+  range: { start: 0, end: 0 },
+  data: null, manual: {}, excl: [], exA: null,
+  tref: { mode: 'auto', signal: null, onset: null }, soundDist: 0,
+  cutoff: 2, splitStep: 10,
+  ath: { mass: null, height: null, temp: 20, press: 1013, wind: 0 },
+  xAxis: 'd', map: null, res: null, trials: [],
+};
+const ui = { zoom: 1, panX: 0, panY: 0, tf: null, pick: null, manClick: false, pointer: null, drag: null, playing: false, busy: null, cancel: false, hover: {}, view: 'video', fgCache: null, audio: null };
+let BG = null;
+const TRIAL_COLORS = ['--s3', '--s7', '--s5', '--s4', '--s6', '--s8'];
+
+/* ---------- 動画 ---------- */
+const hiddenBox = el('div', { style: 'position:fixed;left:-10000px;top:0;width:4px;height:4px;overflow:hidden;opacity:0;pointer-events:none' });
+document.body.append(hiddenBox);
+async function parseMp4(file) {
+  const rd = async (o, l) => new DataView(await file.slice(o, o + l).arrayBuffer());
+  const str = (dv, o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+  let off = 0, moov = null;
+  for (let g = 0; off < file.size && g < 1000; g++) {
+    const h = await rd(off, 16); if (h.byteLength < 8) break;
+    let size = h.getUint32(0); const type = str(h, 4); let hdr = 8;
+    if (size === 1) { size = Number(h.getBigUint64(8)); hdr = 16; } else if (size === 0) size = file.size - off;
+    if (size < 8) break;
+    if (type === 'moov') { if (size > 200e6) return null; moov = await rd(off + hdr, size - hdr); break; }
+    off += size;
+  }
+  if (!moov) return null;
+  const boxes = (dv, s, e) => { const out = []; let p = s; while (p + 8 <= e) { let size = dv.getUint32(p); const type = str(dv, p + 4); let hdr = 8; if (size === 1) { size = Number(dv.getBigUint64(p + 8)); hdr = 16; } else if (size === 0) size = e - p; if (size < 8 || p + size > e) break; out.push({ type, start: p + hdr, end: p + size }); p += size; } return out; };
+  const find = (dv, b, path) => { let cur = [b]; for (const t of path) { const nx = []; for (const c of cur) nx.push(...boxes(dv, c.start, c.end).filter(x => x.type === t)); cur = nx; if (!cur.length) return null; } return cur[0]; };
+  for (const trak of boxes(moov, 0, moov.byteLength).filter(b => b.type === 'trak')) {
+    const hdlr = find(moov, trak, ['mdia', 'hdlr']); if (!hdlr || str(moov, hdlr.start + 8) !== 'vide') continue;
+    const mdhd = find(moov, trak, ['mdia', 'mdhd']); if (!mdhd) continue;
+    const ts = moov.getUint32(mdhd.start + (moov.getUint8(mdhd.start) === 1 ? 20 : 12));
+    const stts = find(moov, trak, ['mdia', 'minf', 'stbl', 'stts']); if (!stts) continue;
+    const n = moov.getUint32(stts.start + 4); let total = 0, best = 0, bc = 0;
+    for (let i = 0; i < n; i++) { const c = moov.getUint32(stts.start + 8 + i * 8), d = moov.getUint32(stts.start + 12 + i * 8); total += c; if (c > bc) { bc = c; best = d; } }
+    if (best && ts) return { fps: Math.round(ts / best * 1000) / 1000, frames: total };
+  }
+  return null;
+}
+async function detectFps() {
+  const v = cam.video; if (!v || !('requestVideoFrameCallback' in v)) { toast('このブラウザでは fps を自動検出できません。手入力してください'); return; }
+  const meas = (rate, ms) => new Promise(res => { const t = []; let stop = false; const cb = (now, m) => { t.push(m.mediaTime); if (!stop) v.requestVideoFrameCallback(cb); }; v.requestVideoFrameCallback(cb); v.playbackRate = rate; v.play().catch(() => { stop = true; res(t); }); setTimeout(() => { stop = true; v.pause(); res(t); }, ms); });
+  const est = t => { const d = []; for (let i = 1; i < t.length; i++) { const x = t[i] - t[i - 1]; if (x > 1e-4) d.push(x); } if (d.length < 4) return null; d.sort((a, b) => a - b); return 1 / d[Math.floor(d.length * 0.2)]; };
+  let f = est(await meas(1, 700)); if (f && f > 70) f = est(await meas(0.2, 900)) || f;
+  v.pause(); v.playbackRate = 1;
+  if (!f) { toast('fps を検出できませんでした。手入力してください'); return; }
+  const list = [24, 25, 29.97, 30, 50, 59.94, 60, 119.88, 120, 239.76, 240]; let best = null, bd = 0.012;
+  for (const c of list) { const d = Math.abs(f - c) / c; if (d < bd) { bd = d; best = c; } }
+  cam.fpsFile = best ?? Math.round(f * 100) / 100; if (!cam.fpsCapSet) cam.fpsCap = cam.fpsFile;
+  cam.n = Math.max(1, Math.floor(cam.dur * cam.fpsFile + 1e-3));
+  syncVideoInputs(); showFrame(cam.frame); compute(); toast(`${cam.fpsFile} fps と推定しました`);
+}
+async function loadVideo(file) {
+  if (!file) return;
+  if (ui.playing) togglePlay();
+  if (cam.video) cam.video.remove();
+  if (cam.url) URL.revokeObjectURL(cam.url);
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.setAttribute('playsinline', '');
+  hiddenBox.append(v); cam.url = URL.createObjectURL(file); v.src = cam.url;
+  try {
+    await new Promise((res, rej) => { v.addEventListener('loadeddata', res, { once: true }); v.addEventListener('error', () => rej(new Error('この動画を再生できません（HEVC の場合は H.264 の MP4 に変換してください）')), { once: true }); setTimeout(() => rej(new Error('動画の読み込みがタイムアウトしました')), 30000); });
+  } catch (e) { toast(e.message, 6000); v.remove(); return; }
+  const prev = { w: cam.w, h: cam.h, n: cam.n, name: cam.fileName };
+  let meta = null; try { meta = await parseMp4(file); } catch (e) { meta = null; }
+  let fpsFile = cam.fpsFile, n;
+  if (meta && meta.fps > 0) { fpsFile = meta.fps; n = meta.frames || Math.floor(v.duration * fpsFile + 1e-3); }
+  else n = Math.max(1, Math.floor(v.duration * fpsFile + 1e-3));
+  const sameSize = prev.w === v.videoWidth && prev.h === v.videoHeight;
+  const same = sameSize && prev.name === file.name && prev.n === n && !!st.data;   // 同じ動画を開き直した（プロジェクトを開いたあとなど）
+  const hadMarkers = st.mk.rows.some(r => r.p);
+  Object.assign(cam, { video: v, file, fileName: file.name, w: v.videoWidth, h: v.videoHeight, dur: v.duration, shown: -1, fpsFile, n });
+  if (!cam.fpsCapSet || !same) { cam.fpsCap = cam.fpsFile; cam.fpsCapSet = false; }
+  BG = null; ui.audio = null; ui.fgCache = null; $('audioCv').hidden = true;
+  if (!same) { st.data = null; st.manual = {}; st.excl = []; st.exA = null; st.tref.onset = null; st.tref.signal = null; st.range = { start: 0, end: cam.n - 1 }; st.trk.init = null; if (st.tref.mode === 'signal') st.tref.mode = 'auto'; syncSettings(); }
+  if (!sameSize && hadMarkers) { st.mk.rows.forEach(r => { r.p = null; r.q = null; }); }
+  ui.zoom = 1; ui.panX = ui.panY = 0;
+  syncVideoInputs(); renderRange(); renderExcl(); updateManInfo(); computeMap();
+  await showFrame(same ? cam.frame : 0);
+  compute();
+  if (!$('trialName').value) $('trialName').value = file.name.replace(/\.[^.]+$/, '');
+  toast(!same && sameSize && hadMarkers ? `${cam.fpsFile} fps・${cam.n} コマ。マーカーは前の動画の位置を使います（カメラを動かしていなければそのまま追跡できます）` : `${cam.w}×${cam.h}・${cam.fpsFile} fps・${cam.n} コマ。スロー動画は「撮影fps」を撮影時の値にしてください`, 6000);
+}
+function syncVideoInputs() {
+  $('fpsFile').value = cam.fpsFile; $('fpsCap').value = cam.fpsCap;
+  $('camInfo').textContent = cam.w ? `${cam.fileName || '（動画未読込）'} ・ ${cam.w}×${cam.h} ・ ${cam.n} コマ ・ ${(cam.n / cam.fpsCap).toFixed(2)} s（実時間）` : '未読込';
+  $('fpsWarn').hidden = !(cam.w && cam.fpsCap < 50);
+}
+function seekRaw(j) {
+  return new Promise(resolve => {
+    const v = cam.video; if (!v) return resolve();
+    const t = Math.min((j + 0.5) / cam.fpsFile, Math.max(0, cam.dur - 0.0005));
+    let seeked = false, framed = !('requestVideoFrameCallback' in v), done = false;
+    const finish = force => { if (done) return; if (force || (seeked && framed)) { done = true; v.removeEventListener('seeked', onS); cam.shown = j; resolve(); } };
+    const onS = () => { seeked = true; if (!framed) setTimeout(() => { framed = true; finish(); }, 90); finish(); };
+    v.addEventListener('seeked', onS);
+    if (!framed) v.requestVideoFrameCallback(() => { framed = true; finish(); });
+    v.currentTime = t; setTimeout(() => finish(true), 4000);
+  });
+}
+async function showFrame(j) {
+  j = clamp(Math.round(j), 0, Math.max(0, (cam.n || 1) - 1)); cam.frame = j; updateTimeline();
+  if (!cam.video || ui.busy) { draw(); return; }
+  cam.q.want = j; if (cam.q.busy) return;
+  cam.q.busy = true;
+  while (cam.q.want !== null) { const t = cam.q.want; cam.q.want = null; if (cam.shown !== t) await seekRaw(t); ui.fgCache = null; draw(); }
+  cam.q.busy = false;
+  if (st.res) drawCharts();
+}
+
+/* ---------- タイムライン ---------- */
+const relT = j => { const r = st.res; return r ? (j - st.range.start - r.refIdx) * r.dt : null; };
+function updateTimeline() {
+  const n = cam.n || 0;
+  const s = $('frameSlider'); s.max = Math.max(0, n - 1); s.value = cam.frame;
+  const rt = relT(cam.frame);
+  const tag = st.res ? (Math.abs(cam.frame - (st.range.start + (st.res.onsetIdx ?? -1e9))) < 0.5 ? ' ・ 動き出し' : fin(st.tref.signal) && Math.abs(cam.frame - st.tref.signal) < 0.5 ? ' ・ 合図' : '') : '';
+  $('frameInfo').textContent = n ? `F ${cam.frame} / ${n - 1} ・ ${fin(rt) ? (rt >= 0 ? '+' : '') + rt.toFixed(3) + ' s' : (cam.frame / cam.fpsCap).toFixed(3) + ' s'}${tag}` : '—';
+  drawCov();
+}
+function drawCov() {
+  const cv = $('covBar'); const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
+  if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const n = Math.max(1, cam.n), X = j => j / n * W;
+  ctx.fillStyle = cssVar('--border-strong'); ctx.globalAlpha = 0.5; ctx.fillRect(X(st.range.start), 0, X(st.range.end + 1) - X(st.range.start), H); ctx.globalAlpha = 1;
+  const d = st.data;
+  if (d) {
+    const cols = { 1: cssVar('--s1'), 4: cssVar('--s2'), 5: cssVar('--s7') };
+    for (let j = 0; j < Math.min(n, d.flag.length); j++) { const f = d.flag[j]; if (!f) continue; ctx.fillStyle = cols[f] || cssVar('--s1'); ctx.fillRect(X(j), 0, Math.max(1, W / n), H); }
+  }
+  ctx.fillStyle = cssVar('--muted'); for (const [a, b] of st.excl) ctx.fillRect(X(a), 0, X(b + 1) - X(a), H);
+  ctx.fillStyle = cssVar('--s5'); for (const k of Object.keys(st.manual)) ctx.fillRect(X(+k), 0, Math.max(2, W / n), H);
+  const mark = (j, c) => { if (!fin(j)) return; ctx.fillStyle = c; ctx.fillRect(X(j) - 1, 0, 2, H); };
+  if (st.res && fin(st.res.onsetIdx)) mark(st.range.start + st.res.onsetIdx, cssVar('--ok'));
+  mark(st.tref.signal, cssVar('--danger'));
+  ctx.fillStyle = cssVar('--text'); ctx.fillRect(X(cam.frame), 0, 1.5, H);
+}
+function renderRange() {
+  $('rangeStart').value = st.range.start; $('rangeEnd').value = st.range.end;
+  const N = st.range.end - st.range.start + 1;
+  $('rangeInfo').textContent = N > 0 ? `${N} コマ ・ ${(N / cam.fpsCap).toFixed(2)} s` : '';
+  drawCov();
+}
+function setRange(a, b) {
+  const n0 = cam.n || 1e9; a = clamp(Math.round(a), 0, n0 - 1); b = clamp(Math.round(b), 0, n0 - 1); if (b < a) [a, b] = [b, a];
+  st.range.start = a; st.range.end = b; renderRange(); compute();
+}
+function togglePlay() {
+  const v = cam.video; if (!v || ui.busy) return;
+  if (ui.playing) { ui.playing = false; $('btnPlay').textContent = '▶'; v.pause(); cam.shown = -1; showFrame(cam.frame); return; }
+  ui.playing = true; $('btnPlay').textContent = '❚❚'; v.playbackRate = parseFloat($('playRate').value);
+  const end = st.range.end > st.range.start ? st.range.end : cam.n - 1;
+  if (cam.frame >= end) v.currentTime = ((st.range.end > st.range.start ? st.range.start : 0) + 0.5) / cam.fpsFile;
+  const rv = 'requestVideoFrameCallback' in v;
+  const tick = (now, m) => {
+    if (!ui.playing) return;
+    cam.frame = Math.round(m ? m.mediaTime * cam.fpsFile : v.currentTime * cam.fpsFile - 0.5); cam.shown = -1; ui.fgCache = null; updateTimeline(); draw(); if (st.res) drawCharts();
+    if (cam.frame >= end || v.ended) { togglePlay(); return; }
+    rv ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(() => tick());
+  };
+  rv ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(() => tick());
+  v.play().catch(() => { ui.playing = false; $('btnPlay').textContent = '▶'; });
+}
+
+/* ---------- 距離の基準 ---------- */
+function computeMap() {
+  const m = SL.buildMap(st.mk.rows.map(r => ({ d: r.d, p: r.p, q: st.mk.pair ? r.q : null })), st.mk.method, { quietPairs: false });
+  st.map = m.ok ? m : null; st.mapErr = m.ok ? null : m.err;
+  renderMk(); renderMap(m);
+  return st.map;
+}
+function rowComplete(r) { return r.p && (!st.mk.pair || r.q) && fin(r.d); }
+function renderMk() {
+  const t = $('mkTable'); t.innerHTML = '';
+  const pair = st.mk.pair, m = st.map;
+  t.append(el('thead', {}, el('tr', {}, el('th', { text: '距離 (m)' }), el('th', { text: pair ? '手前' : '位置' }), pair ? el('th', { text: '奥' }) : null, el('th', { text: '誤差' }), el('th', { text: '' }))));
+  const tb = el('tbody');
+  st.mk.rows.forEach((r, i) => {
+    const pt = (which) => { const p = r[which]; const on = ui.pick && ui.pick.row === i && ui.pick.which === which; return el('td', { title: p ? `画像上の位置 ${p[0].toFixed(1)}, ${p[1].toFixed(1)} px` : 'まだ指定していません' }, el('button', { class: 'btn sm' + (on ? ' on' : ''), text: p ? '✓ 再指定' : '指定', onclick: () => startPick(i, which) })); };
+    let res = '';
+    if (m && rowComplete(r)) { const q = m.residuals.find(x => Math.abs(x.d - r.d) < 1e-9); if (q) { const cm = v => (Math.abs(v * 100) < 0.05 ? 0 : v * 100).toFixed(1); res = m.kind === 'spline' ? `${cm(q.resBase)} cm*` : `${cm(q.res)} cm`; } }
+    const din = el('input', { type: 'number', step: '0.01', value: fin(r.d) ? r.d : '', 'aria-label': `マーカー${i + 1}の距離` });
+    din.addEventListener('change', () => { r.d = parseFloat(din.value); computeMap(); BG = null; compute(); draw(); });
+    tb.append(el('tr', { class: rowComplete(r) ? '' : 'need' }, el('td', {}, din), pt('p'), pair ? pt('q') : null, el('td', { class: 'num', text: res }),
+      el('td', {}, st.mk.rows.length > 2 ? el('button', { class: 'btn sm danger', text: '×', title: '削除', onclick: () => { st.mk.rows.splice(i, 1); computeMap(); BG = null; compute(); draw(); } }) : null)));
+  });
+  t.append(tb);
+}
+function renderMap(m) {
+  const box = $('mapResult'); box.innerHTML = '';
+  if (!m.ok) { box.append(el('div', { class: 'map-box', text: m.err })); return; }
+  const kindName = { linear: '直線', proj: '透視補正', spline: '透視補正＋曲線補正' }[m.kind];
+  const b = el('div', { class: 'map-box' });
+  b.append(el('div', {}, '換算：', el('b', { text: kindName }), `（マーカー ${m.n} 距離）・ ${m.dRange[0]}〜${m.dRange[1]} m`));
+  b.append(el('div', {}, `1 m あたり ${m.pxPerM[0].toFixed(1)}〜${m.pxPerM[1].toFixed(1)} px（1 px ≒ ${(100 / m.pxPerM[1]).toFixed(1)}〜${(100 / m.pxPerM[0]).toFixed(1)} cm）`));
+  if (m.rms != null && m.kind !== 'linear') b.append(el('div', {}, `マーカーの当てはめ誤差 ${(m.rms * 100).toFixed(1)} cm（RMS）`));
+  else if (m.rms != null && m.n > 2) b.append(el('div', {}, `マーカーの当てはめ誤差 ${(m.rms * 100).toFixed(1)} cm（RMS）`));
+  if (m.kind === 'spline') b.append(el('div', { class: 'note', text: '* 曲線補正の前の誤差（補正後はマーカー上で 0）' }));
+  if (m.warnings.length) { const ul = el('ul'); m.warnings.forEach(w => ul.append(el('li', { text: w }))); b.append(ul); }
+  box.append(b);
+}
+function startPick(row, which) {
+  cancelModes();
+  ui.pick = { row, which }; renderMk(); updateHint(); draw();
+}
+function nextUnset(fromRow, fromWhich) {
+  const order = []; st.mk.rows.forEach((r, i) => { order.push([i, 'p']); if (st.mk.pair) order.push([i, 'q']); });
+  let k = order.findIndex(([i, w]) => i === fromRow && w === fromWhich);
+  for (let c = 1; c <= order.length; c++) { const [i, w] = order[(k + c) % order.length]; if (!st.mk.rows[i][w]) return { row: i, which: w }; }
+  return null;
+}
+
+/* ---------- 追跡 ---------- */
+const workCv = document.createElement('canvas');
+function grabBand(geo) {
+  if (workCv.width !== geo.pw || workCv.height !== geo.ph) { workCv.width = geo.pw; workCv.height = geo.ph; }
+  const ctx = workCv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(cam.video, geo.x0, geo.y0, geo.bw, geo.bh, 0, 0, geo.pw, geo.ph);
+  return ctx.getImageData(0, 0, geo.pw, geo.ph).data;
+}
+let geoCache = null;
+function getGeo() {
+  const m = st.map; if (!m || !cam.w) return null;
+  const key = JSON.stringify([m.origin, m.u, m.pars, m.kind, st.band, cam.w, cam.h, st.mk.rows.map(r => r.d)]);
+  if (geoCache && geoCache.key === key) return geoCache.geo;
+  const geo = SL.bandGeometry(m, { above: st.band.above, below: st.band.below, dMin: m.dRange[0] - st.band.before, dMax: m.dRange[1] + st.band.after, maxPix: 1100000, maxW: 2400 }, cam.w, cam.h);
+  geoCache = { key, geo }; return geo;
+}
+function setBusy(k) {
+  ui.busy = k;
+  $('runTrack').disabled = !!k; $('retrack').disabled = !!k; $('cancelTrack').disabled = !k; $('signalAudio').disabled = !!k;
+  $('topStatus').textContent = k ? ({ track: '追跡中…', bg: '背景を作成中…', audio: '音を解析中…' }[k] || '処理中…') : statusText();
+}
+function statusText() { return !cam.w ? '動画を読み込んでください' : !st.map ? '② 距離の基準を指定してください' : !st.data ? '③ 追跡を開始してください' : st.res ? '解析済み' : '追跡データを確認してください'; }
+async function ensureBackground(geo) {
+  const key = JSON.stringify([geo.x0, geo.y0, geo.pw, geo.ph, geo.s0, geo.s1, st.trk.bg, st.trk.bg === 'frame' ? st.trk.bgFrame : null, cam.fileName, cam.n]);
+  if (BG && BG.key === key) return BG;
+  const L = geo.pw * geo.ph * 3;
+  let frames;
+  if (st.trk.bg === 'frame') frames = [fin(st.trk.bgFrame) ? st.trk.bgFrame : cam.frame];
+  else { const K = Math.min(25, Math.max(5, cam.n)); frames = []; for (let k = 0; k < K; k++) frames.push(Math.round((cam.n - 1) * (k + 0.5) / K)); }
+  const stack = new Uint8Array(frames.length * L);
+  for (let k = 0; k < frames.length; k++) {
+    if (ui.cancel) throw new Error('中止しました');
+    await seekRaw(frames[k]);
+    stack.set(SL.rgbaToRgb(grabBand(geo), geo.pw * geo.ph), k * L);
+    $('trkProg').style.width = `${(k + 1) / frames.length * 100}%`; $('trkStatus').textContent = `背景を作成中 ${k + 1} / ${frames.length}`;
+    if (k % 4 === 0) await sleep(0);
+  }
+  const rgb = frames.length === 1 ? stack : SL.medianBackground(stack, frames.length, L, geo.bin);
+  BG = { key, rgb, geo, frames };
+  return BG;
+}
+function trackEvery() { const e = st.trk.every; if (e > 0) return e; return Math.max(1, Math.round(cam.fpsCap / 120)); }
+function measure(img, geo, wantMask) { return SL.measureFrame(img, BG.rgb, geo, { thr: st.trk.thr, shadow: st.trk.shadow }, wantMask); }
+async function runTrack(fromFrame) {
+  if (!cam.video) { toast('動画を読み込んでください'); return; }
+  if (!st.map) { toast('先に ② 距離の基準（マーカー）を指定してください'); return; }
+  const geo = getGeo(); if (!geo) { toast('追跡する範囲が画面の外です。マーカーの位置を確認してください'); return; }
+  if (ui.playing) togglePlay();
+  cancelModes(); ui.cancel = false;
+  const keepFrame = cam.frame;
+  try {
+    setBusy('bg'); await ensureBackground(geo);
+    setBusy('track');
+    const n = cam.n;
+    if (!st.data || st.data.n !== n) st.data = { n, u: new Float32Array(n).fill(NaN), v: new Float32Array(n).fill(NaN), flag: new Uint8Array(n) };
+    const d = st.data, a = fin(fromFrame) ? fromFrame : st.range.start, b = st.range.end;
+    for (let j = a; j <= b; j++) { d.u[j] = NaN; d.v[j] = NaN; d.flag[j] = 0; }
+    let init = null;
+    if (fin(fromFrame)) { const q = st.manual[fromFrame]; if (q) init = st.map.S(q[0], q[1]); }
+    else if (st.trk.init) init = st.map.S(st.trk.init[0], st.trk.init[1]);
+    const T = SL.createTracker(geo, st.map, { init });
+    const every = trackEvery(); const t0 = performance.now(); let cnt = 0, ok = 0;
+    const hists = new Map();
+    for (let j = a; j <= b; j += every) {
+      if (ui.cancel) { toast('追跡を中止しました'); break; }
+      await seekRaw(j);
+      const h = measure(grabBand(geo), geo, false);
+      hists.set(j, Uint16Array.from(h.cnt));
+      const m = SL.trackStep(T, h, j); cnt++;
+      if (m && m.count > 0 && fin(m.u)) { d.u[j] = m.u; d.v[j] = m.v; d.flag[j] = m.ok ? 1 : 4; if (m.ok) ok++; }
+      if (cnt % 6 === 0 || j + every > b) {
+        $('trkProg').style.width = `${(j - a + 1) / (b - a + 1) * 100}%`;
+        const el_ = (performance.now() - t0) / 1000;
+        $('trkStatus').textContent = `F${j} ・ 検出 ${ok} / ${cnt} コマ ・ ${el_.toFixed(0)} 秒`;
+        cam.frame = j; updateTimeline(); draw(); await sleep(0);
+      }
+      if (T.ended) { $('trkStatus').textContent += ' ・ 走者が範囲を出たので終了'; break; }
+    }
+    // 2回目：他の人・物との重なりを補正（前後のコマの前景から差し引く）
+    const fs = cam.fpsCap / every;
+    const rf = SL.refineOverlaps(hists, d, geo, st.map, fs);
+    const okN = Array.from(d.flag.subarray(a, b + 1)).filter(f => f === 1 || f === 5).length;
+    $('trkStatus').textContent = `完了：検出 ${okN} / ${cnt} コマ${rf.corrected ? `（うち重なりを補正 ${rf.corrected}）` : ''}${rf.rejected ? `・重なりで不採用 ${rf.rejected}` : ''}（${((performance.now() - t0) / 1000).toFixed(1)} 秒）`;
+    $('trkProg').style.width = '100%';
+  } catch (e) { toast(e.message || String(e), 5000); }
+  finally { setBusy(null); }
+  compute(); cam.shown = -1; await showFrame(keepFrame);
+}
+function updateManInfo() { const nm = Object.keys(st.manual).length; $('manInfo').textContent = `手動の修正：${nm} コマ ・ 除外：${st.excl.length} 区間`; $('runnerInfo').textContent = st.trk.init ? `指定済み（${st.trk.init.map(v => v.toFixed(0)).join(', ')}）` : '自動で探します'; }
+function renderExcl() {
+  const L = $('exList'); L.innerHTML = '';
+  st.excl.forEach(([a, b], i) => L.append(el('div', { class: 'list-item' }, el('span', { class: 'grow mono', text: `F${a}〜F${b}（${((b - a + 1) / cam.fpsCap).toFixed(2)} s）` }), el('button', { class: 'btn sm danger', text: '×', onclick: () => { st.excl.splice(i, 1); renderExcl(); updateManInfo(); compute(); } }))));
+  $('exA').textContent = fin(st.exA) ? `開始 F${st.exA}` : '開始＝現在';
+}
+
+/* ---------- 解析 ---------- */
+function compute() {
+  st.res = null;
+  const m = st.map, d = st.data;
+  if (m && d && cam.n) {
+    const a = st.range.start, b = Math.min(st.range.end, d.n - 1), N = b - a + 1;
+    if (N > 10) {
+      const pos = new Float64Array(N).fill(NaN), flag = new Uint8Array(N);
+      const ex = j => st.excl.some(([p, q]) => j >= p && j <= q);
+      for (let i = 0; i < N; i++) {
+        const j = a + i;
+        if (ex(j)) { flag[i] = 3; continue; }
+        const q = st.manual[j];
+        if (q) { pos[i] = m.F(m.S(q[0], q[1])); flag[i] = 2; }
+        else if (d.flag[j] === 1 || d.flag[j] === 5) { pos[i] = m.F(m.S(d.u[j], d.v[j])); flag[i] = 1; }
+      }
+      const A = st.ath;
+      const ath = A.mass > 0 && A.height > 0 ? { mass: A.mass, height: A.height, temp: A.temp, press: (A.press || 1013) * 0.750062, wind: A.wind } : null;
+      const valid = Array.from(pos).filter(fin).length;
+      if (valid >= 10) {
+        const r = SL.analyze({ pos, flag, fps: cam.fpsCap, f0: a, cutoff: st.cutoff, cutoff6: 6, tref: { mode: st.tref.mode, signal: st.tref.signal, onset: st.tref.onset }, splitStep: st.splitStep, goal: m.dRange[1], athlete: ath });
+        if (r.ok) { r.f0 = a; st.res = r; }
+      }
+    }
+  }
+  renderTime(); renderResults(); drawCharts(); updateTimeline(); draw();
+  $('topStatus').textContent = ui.busy ? $('topStatus').textContent : statusText();
+}
+
+/* ---------- 時間 ---------- */
+function renderTime() {
+  const r = st.res;
+  const fr = j => `F${fin(j) ? (Math.abs(j - Math.round(j)) < 0.05 ? Math.round(j) : j.toFixed(1)) : '—'}`;
+  if (r && fin(r.onsetIdx)) { const src = { manual: '手動', model: 'モデルから推定', disp: '変位から推定' }[r.onsetSrc] || ''; $('onsetInfo').textContent = `${fr(st.range.start + r.onsetIdx)}（${src}）`; }
+  else $('onsetInfo').textContent = fin(st.tref.onset) ? `${fr(st.tref.onset)}（手動）` : r && !r.fromRest ? '静止状態なし' : '—';
+  $('signalInfo').textContent = fin(st.tref.signal) ? `${fr(st.tref.signal)}${r && fin(r.reaction) ? ` ・ 動き出しまで ${r.reaction.toFixed(3)} s` : ''}` : '未設定';
+  drawAudio();
+}
+async function findSignal() {
+  if (!cam.file) { toast('動画を読み込んでください'); return; }
+  setBusy('audio');
+  try {
+    if (!ui.audio) {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) throw new Error('このブラウザでは音声を解析できません');
+      const ac = new AC(); let buf;
+      try { buf = await ac.decodeAudioData(await cam.file.arrayBuffer()); } catch (e) { throw new Error('この動画の音声を読み込めません（音声なし、または対応していない形式）'); } finally { ac.close && ac.close(); }
+      const ch = buf.numberOfChannels > 1 ? (() => { const a = buf.getChannelData(0), b = buf.getChannelData(1), o = new Float32Array(a.length); for (let i = 0; i < a.length; i++) o[i] = (a[i] + b[i]) / 2; return o; })() : buf.getChannelData(0);
+      ui.audio = { ch, sr: buf.sampleRate, dur: buf.duration };
+    }
+    const A = ui.audio, r = st.res;
+    const t1 = r && fin(r.onsetIdx) ? (st.range.start + r.onsetIdx + 0.5) / cam.fpsFile + 0.05 : (st.range.end + 1) / cam.fpsFile;
+    const t0 = Math.max(0, Math.min(t1 - 0.2, (st.range.start) / cam.fpsFile - 1));
+    const o = SL.audioOnset(A.ch, A.sr, { t0: 0, t1 });
+    A.env = o ? o.env : null; A.win = o ? o.win : 0.002; A.t0 = t0; A.t1 = t1;
+    if (!o || !fin(o.t)) { toast('はっきりした合図の音が見つかりませんでした。映像を見て「現在のフレームを合図に」で設定してください', 6000); drawAudio(); return; }
+    const delayFrames = (st.soundDist || 0) / 343 * cam.fpsCap;
+    st.tref.signal = Math.max(0, o.t * cam.fpsFile - delayFrames);
+    A.tSig = o.t;
+    if (st.tref.mode === 'auto') { st.tref.mode = 'signal'; document.querySelectorAll('input[name=tref]').forEach(x => x.checked = x.value === 'signal'); }
+    compute(); ui.goFrame = Math.round(st.tref.signal);
+    toast(`合図の音を見つけました（${o.t.toFixed(3)} s、S/N ${o.snr.toFixed(0)}）。時間の基準を「合図」にしました${Math.abs(cam.fpsCap - cam.fpsFile) > 0.5 ? '。スロー動画では音と映像がずれることがあるので、映像でも確認してください' : ''}`, 6500);
+  } catch (e) { toast(e.message || String(e), 6000); }
+  finally { setBusy(null); }
+  if (fin(ui.goFrame)) { const g = ui.goFrame; ui.goFrame = null; cam.shown = -1; await showFrame(g); }
+}
+function drawAudio() {
+  const A = ui.audio, cv = $('audioCv');
+  if (!A || !A.env) { cv.hidden = true; return; }
+  cv.hidden = false;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const tA = Math.max(0, (A.tSig ?? A.t1) - 1.5), tB = Math.min(A.dur, (A.tSig ?? A.t1) + 1.5);
+  const X = t => (t - tA) / (tB - tA) * W;
+  let mx = 1e-6; for (let k = Math.floor(tA / A.win); k < Math.min(A.env.length, tB / A.win); k++) mx = Math.max(mx, A.env[k]);
+  ctx.fillStyle = cssVar('--s1');
+  for (let k = Math.floor(tA / A.win); k < Math.min(A.env.length, tB / A.win); k++) { const x = X(k * A.win), h = A.env[k] / mx * (H - 6); ctx.fillRect(x, (H - h) / 2, Math.max(1, W / ((tB - tA) / A.win)), h); }
+  if (fin(A.tSig)) { ctx.fillStyle = cssVar('--danger'); ctx.fillRect(X(A.tSig) - 1, 0, 2, H); }
+  const tc = (cam.frame + 0.5) / cam.fpsFile; if (tc >= tA && tc <= tB) { ctx.fillStyle = cssVar('--text'); ctx.fillRect(X(tc), 0, 1, H); }
+  ctx.fillStyle = cssVar('--muted'); ctx.font = `10.5px ${cssVar('--font')}`; ctx.textBaseline = 'top'; ctx.fillText('音の大きさ（赤＝合図）', 4, 2);
+}
+
+/* ---------- 結果の表示 ---------- */
+function kpi(k, v, unit, d, cls, sub) { return el('div', { class: 'kpi ' + (cls || '') }, el('div', { class: 'k', text: k }), el('div', { class: 'v' }, v, unit ? el('small', { text: unit }) : null, sub ? el('span', { class: 'sub', text: sub }) : null), d ? el('div', { class: 'd', text: d }) : null); }
+function refName(r) { return { onset: '動き出し', signal: '合図', line: '0 m の通過', video: '解析範囲の最初' }[r.mode]; }
+function renderResults() {
+  const r = st.res;
+  const km = $('kpiMain'), sp = $('splitTable'), mo = $('kpiModel'), fv = $('kpiFv'), w = $('resWarn');
+  km.innerHTML = ''; sp.innerHTML = ''; mo.innerHTML = ''; fv.innerHTML = ''; w.innerHTML = '';
+  renderTrials();
+  if (!r) {
+    $('resInfo').textContent = '';
+    km.append(el('div', { class: 'empty', text: !cam.w ? '動画を読み込むと、ここに結果が出ます' : !st.map ? '② 距離の基準（マーカー）を指定してください' : !st.data ? '③ 追跡を開始すると、ここに結果が出ます' : '追跡された位置が足りません。解析範囲や追跡の設定を確認してください' }));
+    return;
+  }
+  const goal = st.map.dRange[1];
+  $('resInfo').textContent = `時間の基準：${refName(r)} ・ 平滑化 ${st.cutoff} Hz ・ ${cam.fpsCap} fps`;
+  const notes = r.notes.slice();
+  if (st.map.n === 2) notes.push('マーカーが2距離だけなので直線で換算しています（カメラが走路に正対している前提）');
+  const valid = Array.from(r.raw).filter(fin).length, tot = r.i1 - r.i0 + 1;
+  if (valid < 0.7 * tot) notes.push(`追跡できたコマが少なめです（${valid} / ${tot}）。映像の「前景」表示で検出を確認してください`);
+  if (notes.length) { const ul = el('ul'); notes.forEach(t => ul.append(el('li', { text: t }))); w.append(el('div', { class: 'warn-box' }, ul)); }
+  const g = r.goalSplit;
+  km.append(kpi(`${goal} m タイム`, g && fin(g.t) ? g.t.toFixed(2) : '—', 's', `${refName(r)}から、体の中心が ${goal} m を通過するまで`, 'main'));
+  km.append(kpi('最高速度', fmt(r.vmax), 'm/s', `時速 ${fmt(r.vmax * 3.6, 1)} km`));
+  km.append(kpi('最高速度の地点', fmt(r.xAtVmax, 1), 'm', `${refName(r)}から ${fmt(r.tAtVmax)} s`));
+  if (g && fin(g.t) && r.mode !== 'video') km.append(kpi(`平均速度（0〜${goal} m）`, fmt(goal / g.t), 'm/s'));
+  if (r.d95) km.append(kpi('最高速度の95%以上', `${fmt(r.d95[0], 1)}〜${fmt(r.d95[1], 1)}`, 'm', '速度を保てた区間'));
+  if (fin(r.reaction)) km.append(kpi('合図→動き出し', r.reaction.toFixed(3), 's', '反応時間の目安（体の中心が動き始めるまで）'));
+  // 区間タイム
+  sp.append(el('thead', {}, el('tr', {}, ...['区間', '通過タイム', '区間タイム', '区間平均速度', '通過時の速度'].map(h => el('th', { text: h })))));
+  const tb = el('tbody');
+  for (const s of r.splits) {
+    tb.append(el('tr', { class: Math.abs(s.d - goal) < 1e-6 ? 'goal' : '' }, el('td', { text: `${fmtD(s.from ?? 0)}〜${fmtD(s.d)} m` }),
+      el('td', { class: 'num', text: fin(s.t) ? `${s.t.toFixed(2)} s` : '—' }), el('td', { class: 'num', text: fin(s.seg) ? `${s.seg.toFixed(2)} s` : '—' }),
+      el('td', { class: 'num', text: fin(s.segV) ? `${s.segV.toFixed(2)} m/s` : '—' }), el('td', { class: 'num', text: fin(s.v) ? `${s.v.toFixed(2)} m/s` : '—' })));
+  }
+  sp.append(tb);
+  // モデル
+  const M = r.model;
+  if (M) {
+    mo.append(kpi('最大速度（モデル）', fmt(M.vmax), 'm/s', 'v(t) = vmax(1 − e^(−t/τ))'));
+    mo.append(kpi('時定数 τ', fmt(M.tau, 3), 's', '小さいほど早く加速'));
+    mo.append(kpi('最初の加速度', fmt(M.amax, 1), 'm/s²', 'vmax ÷ τ'));
+    mo.append(kpi('当てはめ誤差', fmt(M.rmse * 100, 1), 'cm', `位置の RMS（${M.n} 点）`));
+  } else mo.append(el('div', { class: 'note', text: r.fromRest ? 'モデルを当てはめられませんでした（走り始めから最高速度付近までが写っている必要があります）' : '静止状態から写っていないため、モデルは求めません' }));
+  const F = r.fv;
+  if (F) {
+    fv.append(kpi('F0', fmt(F.F0kg), 'N/kg', `最大の水平力 ${fmt(F.F0, 0)} N`));
+    fv.append(kpi('V0', fmt(F.V0), 'm/s', '理論上の最大速度'));
+    fv.append(kpi('Pmax', fmt(F.Pmaxkg), 'W/kg', `最大パワー ${fmt(F.Pmax, 0)} W`));
+    fv.append(kpi('Sfv', fmt(F.Sfv, 3), '', 'F–v の傾き（N·s/m/kg）'));
+    fv.append(kpi('RFmax', fmt(F.RFmax, 1), '%', '水平に力を向ける割合の最大'));
+    fv.append(kpi('DRF', fmt(F.DRF, 2), '', 'RF の低下率（%/(m/s)）'));
+  } else fv.append(el('div', { class: 'note', text: M ? '④ で体重と身長を入れると計算します（全力疾走をスタートから測ったときのみ有効）' : 'モデルが求まると計算できます' }));
+}
+const fmtD = d => Number.isInteger(d) ? String(d) : d.toFixed(1);
+
+/* ---------- 比較（試技） ---------- */
+function loadTrials() { try { const s = store.get('SprintLab.trials.v1'); st.trials = s ? JSON.parse(s) : []; } catch (e) { st.trials = []; } }
+function saveTrials() { store.set('SprintLab.trials.v1', JSON.stringify(st.trials)); }
+function addTrial() {
+  const r = st.res; if (!r) { toast('結果がありません'); return; }
+  const name = $('trialName').value.trim() || cam.fileName || `試技 ${st.trials.length + 1}`;
+  const t = [], x = [], v = [];
+  const stp = Math.max(1, Math.ceil((r.i1 - r.i0 + 1) / 700));
+  for (let i = r.i0; i <= r.i1; i += stp) if (fin(r.xf[i]) && fin(r.v[i])) { t.push(+r.t[i].toFixed(4)); x.push(+r.xf[i].toFixed(3)); v.push(+r.v[i].toFixed(3)); }
+  const used = new Set(st.trials.map(q => q.color));
+  const color = TRIAL_COLORS.find(c => !used.has(c)) || TRIAL_COLORS[st.trials.length % TRIAL_COLORS.length];
+  st.trials.push({ id: Date.now(), name, color, on: true, ref: refName(r), t, x, v, vmax: r.vmax, xAtVmax: r.xAtVmax, goal: st.map.dRange[1], goalT: r.goalSplit ? r.goalSplit.t : null,
+    splits: r.splits.map(s => ({ d: s.d, t: s.t, seg: s.seg, segV: s.segV })), model: r.model ? { vmax: r.model.vmax, tau: r.model.tau } : null, fv: r.fv ? { F0kg: r.fv.F0kg, V0: r.fv.V0, Pmaxkg: r.fv.Pmaxkg } : null, date: new Date().toISOString() });
+  saveTrials(); renderTrials(); drawCharts(); toast(`「${name}」を比較に追加しました`);
+}
+function renderTrials() {
+  const T = $('trialTable'); T.innerHTML = '';
+  if (!st.trials.length) { T.append(el('tbody', {}, el('tr', {}, el('td', { class: 'note', text: '試技を追加すると、速度曲線を重ねて比べられます（このブラウザに保存されます）' })))); return; }
+  const ds = [...new Set(st.trials.flatMap(q => q.splits.map(s => s.d)))].sort((a, b) => a - b).slice(0, 8);
+  T.append(el('thead', {}, el('tr', {}, el('th', { text: '表示' }), el('th', { text: '試技' }), el('th', { text: '最高速度' }), el('th', { text: '地点' }), ...ds.map(d => el('th', { text: `${fmtD(d)} m` })), el('th', { text: 'vmax/τ' }), el('th', { text: '' }))));
+  const tb = el('tbody');
+  st.trials.forEach((q, i) => {
+    const cb = el('input', { type: 'checkbox', 'aria-label': `${q.name} を表示` }); cb.checked = q.on; cb.addEventListener('change', () => { q.on = cb.checked; saveTrials(); drawCharts(); });
+    const nm = el('input', { type: 'text', value: q.name, style: 'width:150px' }); nm.addEventListener('change', () => { q.name = nm.value; saveTrials(); drawCharts(); });
+    tb.append(el('tr', {}, el('td', {}, el('span', { class: 'swatch', style: `display:inline-block;vertical-align:middle;margin-right:6px;background:var(${q.color})` }), cb), el('td', {}, nm),
+      el('td', { class: 'num', text: `${fmt(q.vmax)} m/s` }), el('td', { class: 'num', text: `${fmt(q.xAtVmax, 1)} m` }),
+      ...ds.map(d => { const s = q.splits.find(x => Math.abs(x.d - d) < 1e-6); return el('td', { class: 'num', text: s && fin(s.t) ? `${s.t.toFixed(2)}` : '—' }); }),
+      el('td', { class: 'num', text: q.model ? `${fmt(q.model.vmax)} / ${fmt(q.model.tau)}` : '—' }),
+      el('td', {}, el('button', { class: 'btn sm danger', text: '×', title: '削除', onclick: () => { st.trials.splice(i, 1); saveTrials(); renderTrials(); drawCharts(); } }))));
+  });
+  T.append(tb);
+}
+
+/* ---------- グラフ ---------- */
+function niceStep(range, target) { const raw = range / Math.max(1, target), p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+const tickTxt = (v, s) => v.toFixed(Math.max(0, Math.min(4, -Math.floor(Math.log10(s) + 1e-9))));
+function prepCanvas(cv) { const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); } const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H); return { ctx, W, H }; }
+function axes(ctx, W, H, m, x0, x1, y0, y1, xLabel, yLabel) {
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const ys = niceStep(y1 - y0, Math.max(3, Math.floor(ph / 40))); y0 = Math.floor(y0 / ys) * ys; y1 = Math.ceil(y1 / ys) * ys;
+  const X = v => m.l + (v - x0) / (x1 - x0) * pw, Y = v => m.t + (1 - (v - y0) / (y1 - y0)) * ph;
+  ctx.font = `11px ${cssVar('--font')}`; ctx.fillStyle = cssVar('--muted'); ctx.strokeStyle = cssVar('--grid'); ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = y0; v <= y1 + ys / 2; v += ys) { const y = Math.round(Y(v)) + 0.5; ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke(); ctx.fillText(tickTxt(v, ys), m.l - 6, y); }
+  const xs = niceStep(x1 - x0, Math.max(3, Math.floor(pw / 64))); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let v = Math.ceil(x0 / xs) * xs; v <= x1 + 1e-9; v += xs) { const x = Math.round(X(v)) + 0.5; ctx.strokeStyle = cssVar('--grid'); ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke(); ctx.fillText(tickTxt(v, xs), X(v), H - m.b + 6); }
+  ctx.fillText(xLabel, m.l + pw / 2, H - 15);
+  ctx.save(); ctx.translate(12, m.t + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textBaseline = 'middle'; ctx.fillText(yLabel, 0, 0); ctx.restore();
+  ctx.strokeStyle = cssVar('--axis'); ctx.beginPath(); ctx.moveTo(m.l, H - m.b + 0.5); ctx.lineTo(W - m.r, H - m.b + 0.5); ctx.moveTo(m.l + 0.5, m.t); ctx.lineTo(m.l + 0.5, H - m.b); ctx.stroke();
+  return { X, Y, pw, ph, y0, y1, x0, x1, m, W, H };
+}
+function path(ctx, g, xs, ys, i0, i1, color, width, dash, alpha) {
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineJoin = 'round'; if (dash) ctx.setLineDash(dash); if (alpha) ctx.globalAlpha = alpha;
+  ctx.beginPath(); let p = false;
+  for (let i = i0; i <= i1; i++) { const x = xs[i], y = ys[i]; if (!fin(x) || !fin(y) || x < g.x0 || x > g.x1) { p = false; continue; } const px = g.X(x), py = g.Y(y); p ? ctx.lineTo(px, py) : ctx.moveTo(px, py); p = true; }
+  ctx.stroke(); ctx.restore();
+}
+function legend(id, items) { const lg = $(id); lg.innerHTML = ''; items.forEach(([c, t, dash, w]) => lg.append(el('span', { class: 'item' }, el('span', { class: 'key', style: `background:${dash ? 'transparent' : c};border-top:${dash ? `2px dashed ${c}` : 'none'};height:${w || 2}px` }), t))); }
+function chartTip(tipId, cv, xPx, rows, title) {
+  const tip = $(tipId); tip.innerHTML = ''; tip.append(el('div', { class: 't', text: title }));
+  rows.forEach(([c, v, lab]) => tip.append(el('div', { class: 'r' }, el('i', { class: 'key', style: `background:${c}` }), el('b', { text: v }), el('span', { text: lab }))));
+  tip.hidden = false; const W = cv.clientWidth, tw = tip.offsetWidth; let lx = xPx + 12; if (lx + tw > W) lx = xPx - tw - 12; tip.style.left = `${Math.max(0, lx)}px`; tip.style.top = '8px';
+}
+function emptyChart(cv, tip, lg, msg) { const { ctx, W, H } = prepCanvas($(cv)); $(tip).hidden = true; $(lg).innerHTML = ''; ctx.fillStyle = cssVar('--muted'); ctx.font = `13px ${cssVar('--font')}`; ctx.textAlign = 'center'; ctx.fillText(msg, W / 2, H / 2); }
+function drawCharts() {
+  const r = st.res;
+  const trials = $('showTrials').checked ? st.trials.filter(q => q.on) : [];
+  if (!r && !trials.length) { for (const [cv, tip, lg] of [['chV', 'tipV', 'lgV'], ['chX', 'tipX', 'lgX'], ['chA', 'tipA', 'lgA']]) emptyChart(cv, tip, lg, 'データがありません'); ui.geoV = ui.geoX = ui.geoA = null; return; }
+  const c1 = cssVar('--s1'), c2 = cssVar('--s2'), cSeg = cssVar('--s3'), cMuted = cssVar('--muted'), cText = cssVar('--text-2');
+  const byD = st.xAxis === 'd';
+  // ---- 速度曲線 ----
+  {
+    const { ctx, W, H } = prepCanvas($('chV'));
+    let x0 = Infinity, x1 = -Infinity, vMax = 2;
+    const xsOf = r ? (byD ? r.xf : r.t) : null;
+    if (r) for (let i = r.i0; i <= r.i1; i++) { const x = xsOf[i]; if (!fin(x) || !fin(r.v[i])) continue; x0 = Math.min(x0, x); x1 = Math.max(x1, x); vMax = Math.max(vMax, r.v[i]); }
+    for (const q of trials) { const xs = byD ? q.x : q.t; for (let i = 0; i < xs.length; i++) { x0 = Math.min(x0, xs[i]); x1 = Math.max(x1, xs[i]); vMax = Math.max(vMax, q.v[i]); } }
+    if (r && r.model && $('showModel').checked) vMax = Math.max(vMax, r.model.vmax);
+    if (byD) { x0 = Math.min(Math.floor(x0), 0); x1 = Math.max(Math.ceil(x1), st.map ? st.map.dRange[1] : 0); } else { x0 = Math.min(x0, -0.2); }
+    if (!(x1 > x0)) { x0 = 0; x1 = 1; }
+    const m = { l: 46, r: 14, t: 16, b: 40 };
+    const g = axes(ctx, W, H, m, x0, x1, 0, vMax * 1.08, byD ? '距離 (m)' : `時間 (s)${r ? '・' + refName(r) + 'が 0' : ''}`, '速度 (m/s)');
+    ui.geoV = g;
+    const lg = [];
+    if (r) {
+      // マーカーの距離
+      if (byD && st.map) { ctx.save(); ctx.setLineDash([2, 4]); ctx.strokeStyle = cssVar('--axis'); for (const q of st.map.residuals) { const x = Math.round(g.X(q.d)) + 0.5; ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke(); } ctx.restore(); }
+      if ($('showSeg').checked) {
+        ctx.save(); ctx.strokeStyle = cSeg; ctx.lineWidth = 2; ctx.fillStyle = cSeg; ctx.font = `600 11px ${cssVar('--mono')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        let tPrev = 0;
+        for (const s of r.splits) { if (!fin(s.segV)) { tPrev = s.t; continue; } const a = byD ? s.from : (s.t - s.seg), b = byD ? s.d : s.t; const y = g.Y(s.segV); ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.moveTo(g.X(a), y); ctx.lineTo(g.X(b), y); ctx.stroke(); ctx.globalAlpha = 1; ctx.fillText(s.segV.toFixed(2), (g.X(a) + g.X(b)) / 2, y - 3); tPrev = s.t; }
+        ctx.restore(); lg.push([cSeg, '区間平均速度']);
+      }
+      if ($('showDetail').checked) { path(ctx, g, byD ? r.x6 : r.t, r.v6, r.i0, r.i1, cMuted, 1, null, 0.7); lg.push([cMuted, '1歩ごとの揺れ（6 Hz）', false, 1]); }
+      if (r.model && $('showModel').checked) {
+        const M = r.model, n = 240, xs = [], ys = [];
+        const tA = Math.max(r.t[r.i0], M.t0 - 0.2), tB = r.t[r.i1];
+        for (let k = 0; k <= n; k++) { const tt = tA + (tB - tA) * k / n; xs.push(byD ? SL.modelX(tt, M.p, M.x0) : tt); ys.push(SL.modelV(tt, M.p)); }
+        path(ctx, g, xs, ys, 0, n, c2, 2, [6, 4]); lg.push([c2, `モデル（vmax ${M.vmax.toFixed(2)}・τ ${M.tau.toFixed(2)}）`, true]);
+      }
+      path(ctx, g, xsOf, r.v, r.i0, r.i1, c1, 2.6); lg.unshift([c1, `この試技（${st.cutoff} Hz）`, false, 3]);
+      if (r.ivmax >= 0) { const x = g.X(xsOf[r.ivmax]), y = g.Y(r.vmax); ctx.fillStyle = c1; ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.font = `700 12px ${cssVar('--font')}`; ctx.textAlign = x > W - 160 ? 'right' : 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = cssVar('--text'); ctx.fillText(`最高 ${r.vmax.toFixed(2)} m/s`, x + (x > W - 160 ? -8 : 8), y - 6); }
+      // 現在のフレーム
+      const ci = cam.frame - st.range.start;
+      if (ci >= r.i0 && ci <= r.i1 && fin(xsOf[ci])) { const x = Math.round(g.X(xsOf[ci])) + 0.5; ctx.strokeStyle = cssVar('--text'); ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke(); ctx.globalAlpha = 1; }
+    }
+    for (const q of trials) { const c = cssVar(q.color); path(ctx, g, byD ? q.x : q.t, q.v, 0, q.v.length - 1, c, 1.8); lg.push([c, q.name]); }
+    legend('lgV', lg);
+    const hv = ui.hover.V;
+    if (r && hv != null) {
+      const i = hv; const x = g.X(xsOf[i]);
+      ctx.strokeStyle = cText; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
+      const rows = [[c1, `${fmt(r.v[i])} m/s`, '速度'], [cMuted, `${fmt(r.xf[i])} m`, '位置'], [cMuted, `${fmt(r.a[i], 1)} m/s²`, '加速度']];
+      if (fin(r.vModel[i]) && r.model && $('showModel').checked) rows.push([c2, `${fmt(r.vModel[i])} m/s`, 'モデル']);
+      chartTip('tipV', $('chV'), x, rows, `${r.t[i] >= 0 ? '+' : ''}${r.t[i].toFixed(3)} s ・ F${st.range.start + i}`);
+    } else $('tipV').hidden = true;
+  }
+  if (!r) { emptyChart('chX', 'tipX', 'lgX', 'データがありません'); emptyChart('chA', 'tipA', 'lgA', 'データがありません'); ui.geoX = ui.geoA = null; return; }
+  // ---- 位置 ----
+  {
+    const { ctx, W, H } = prepCanvas($('chX'));
+    let y0 = Infinity, y1 = -Infinity; for (let i = r.i0; i <= r.i1; i++) { for (const a of [r.raw[i], r.xf[i]]) if (fin(a)) { y0 = Math.min(y0, a); y1 = Math.max(y1, a); } }
+    const m = { l: 46, r: 12, t: 12, b: 38 };
+    const g = axes(ctx, W, H, m, r.t[r.i0], r.t[r.i1], Math.floor(y0), Math.ceil(y1), '時間 (s)', '距離 (m)'); ui.geoX = g;
+    const cols = { 1: cMuted, 2: cssVar('--s5') };
+    for (let i = r.i0; i <= r.i1; i++) { const y = r.raw[i]; if (!fin(y)) continue; ctx.fillStyle = cols[r.flag[i]] || cMuted; ctx.globalAlpha = r.flag[i] === 2 ? 1 : 0.55; ctx.fillRect(g.X(r.t[i]) - 1.5, g.Y(y) - 1.5, 3, 3); }
+    ctx.globalAlpha = 1;
+    path(ctx, g, r.t, r.xf, r.i0, r.i1, c1, 2);
+    if (r.model) { const xs = [], ys = []; for (let i = r.i0; i <= r.i1; i++) { xs.push(r.t[i]); ys.push(r.t[i] <= r.model.tEnd + 0.3 ? SL.modelX(r.t[i], r.model.p, r.model.x0) : NaN); } path(ctx, g, xs, ys, 0, xs.length - 1, c2, 1.6, [6, 4]); }
+    for (const s of r.splits) if (fin(s.t)) { ctx.fillStyle = cSeg; ctx.beginPath(); ctx.arc(g.X(s.t), g.Y(s.d), 3.5, 0, Math.PI * 2); ctx.fill(); }
+    const lgx = [[cMuted, '追跡した位置（点）'], [c1, '平滑化']]; if (Object.keys(st.manual).length) lgx.push([cssVar('--s5'), '手動']); if (r.model) lgx.push([c2, 'モデル', true]); lgx.push([cSeg, '区間の通過']);
+    legend('lgX', lgx);
+    const ci = cam.frame - st.range.start; if (ci >= r.i0 && ci <= r.i1) { const x = Math.round(g.X(r.t[ci])) + 0.5; ctx.strokeStyle = cssVar('--text'); ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke(); ctx.globalAlpha = 1; }
+    const hv = ui.hover.X; if (hv != null) chartTip('tipX', $('chX'), g.X(r.t[hv]), [[cMuted, `${fmt(r.raw[hv])} m`, '追跡'], [c1, `${fmt(r.xf[hv])} m`, '平滑化']], `${r.t[hv].toFixed(3)} s ・ F${st.range.start + hv}`); else $('tipX').hidden = true;
+  }
+  // ---- 加速度 ----
+  {
+    const { ctx, W, H } = prepCanvas($('chA'));
+    let y0 = 0, y1 = 1; for (let i = r.i0; i <= r.i1; i++) if (fin(r.a[i])) { y0 = Math.min(y0, r.a[i]); y1 = Math.max(y1, r.a[i]); }
+    if (r.model) y1 = Math.max(y1, Math.min(r.model.amax, y1 * 1.6));
+    const m = { l: 46, r: 12, t: 12, b: 38 };
+    const g = axes(ctx, W, H, m, r.t[r.i0], r.t[r.i1], Math.floor(y0), Math.ceil(y1), '時間 (s)', '加速度 (m/s²)'); ui.geoA = g;
+    if (y0 < 0) { ctx.strokeStyle = cssVar('--axis'); ctx.beginPath(); ctx.moveTo(m.l, g.Y(0)); ctx.lineTo(W - m.r, g.Y(0)); ctx.stroke(); }
+    if (r.model) { const xs = [], ys = []; for (let i = r.i0; i <= r.i1; i++) { xs.push(r.t[i]); ys.push(SL.modelA(r.t[i], r.model.p)); } ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, W - m.l - m.r, H - m.t - m.b); ctx.clip(); path(ctx, g, xs, ys, 0, xs.length - 1, c2, 1.6, [6, 4]); ctx.restore(); }
+    path(ctx, g, r.t, r.a, r.i0, r.i1, c1, 2);
+    legend('lgA', r.model ? [[c1, `平滑化（${st.cutoff} Hz）`], [c2, 'モデル', true]] : [[c1, `平滑化（${st.cutoff} Hz）`]]);
+    const ci = cam.frame - st.range.start; if (ci >= r.i0 && ci <= r.i1) { const x = Math.round(g.X(r.t[ci])) + 0.5; ctx.strokeStyle = cssVar('--text'); ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke(); ctx.globalAlpha = 1; }
+    const hv = ui.hover.A; if (hv != null) chartTip('tipA', $('chA'), g.X(r.t[hv]), [[c1, `${fmt(r.a[hv], 2)} m/s²`, '加速度'], [cMuted, `${fmt(r.v[hv])} m/s`, '速度']], `${r.t[hv].toFixed(3)} s`); else $('tipA').hidden = true;
+  }
+}
+function bindCharts() {
+  const nearest = (g, xs, px) => { const r = st.res; if (!r || !g) return null; let best = null, bd = Infinity; for (let i = r.i0; i <= r.i1; i++) { if (!fin(xs[i]) || !fin(r.v[i])) continue; const d = Math.abs(g.X(xs[i]) - px); if (d < bd) { bd = d; best = i; } } return bd < 40 ? best : null; };
+  const bind = (id, key, xsF, gF) => {
+    const cv = $(id);
+    const f = e => { const r = st.res; if (!r) return null; const x = e.clientX - cv.getBoundingClientRect().left; return nearest(gF(), xsF(), x); };
+    cv.addEventListener('pointermove', e => { ui.hover[key] = f(e); drawCharts(); if (e.buttons === 1 && ui.hover[key] != null) showFrame(st.range.start + ui.hover[key]); });
+    cv.addEventListener('pointerleave', () => { ui.hover[key] = null; drawCharts(); });
+    cv.addEventListener('pointerdown', e => { const i = f(e); if (i != null) showFrame(st.range.start + i); });
+    new ResizeObserver(() => drawCharts()).observe(cv.parentElement);
+  };
+  bind('chV', 'V', () => st.xAxis === 'd' ? st.res.xf : st.res.t, () => ui.geoV);
+  bind('chX', 'X', () => st.res.t, () => ui.geoX);
+  bind('chA', 'A', () => st.res.t, () => ui.geoA);
+}
+
+/* ---------- ビューア ---------- */
+function resizeCv(cv) { const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); } const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return { ctx, W, H, dpr }; }
+function label(ctx, x, y, txt, c, align) { ctx.font = `700 12.5px ${cssVar('--mono')}`; const w = ctx.measureText(txt).width; const lx = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x; ctx.fillStyle = 'rgba(13,13,12,.82)'; ctx.fillRect(lx - 4, y - 10, w + 8, 19); ctx.fillStyle = c; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(txt, lx, y - 0.5); }
+const bgCv = document.createElement('canvas');
+function overlayImage(ctx, T, s, geo, rgbaFn) {
+  if (bgCv.width !== geo.pw || bgCv.height !== geo.ph) { bgCv.width = geo.pw; bgCv.height = geo.ph; }
+  const c = bgCv.getContext('2d'); const id = c.createImageData(geo.pw, geo.ph); rgbaFn(id.data); c.putImageData(id, 0, 0);
+  const [x, y] = T(geo.x0, geo.y0); ctx.imageSmoothingEnabled = true; ctx.drawImage(bgCv, x, y, geo.bw * s, geo.bh * s);
+}
+function draw() {
+  const cv = $('view'); const { ctx, W, H, dpr } = resizeCv(cv);
+  ctx.fillStyle = '#0d0d0c'; ctx.fillRect(0, 0, W, H);
+  $('dropHint').hidden = !!cam.w; if (!cam.w) { ui.tf = null; return; }
+  const s = Math.min(W / cam.w, H / cam.h) * ui.zoom, ox = (W - cam.w * s) / 2 + ui.panX, oy = (H - cam.h * s) / 2 + ui.panY;
+  ui.tf = { s, ox, oy, W, H };
+  if (cam.video && cam.video.readyState >= 2) ctx.drawImage(cam.video, ox, oy, cam.w * s, cam.h * s); else { ctx.fillStyle = '#1c1c1a'; ctx.fillRect(ox, oy, cam.w * s, cam.h * s); }
+  const T = (u, v) => [ox + u * s, oy + v * s];
+  const m = st.map, geo = m ? getGeo() : null;
+  // 背景・前景の表示
+  if (geo && BG && BG.geo === geo && ui.view !== 'video') {
+    if (ui.view === 'bg') overlayImage(ctx, T, s, geo, d => { const b = BG.rgb; for (let i = 0, n = geo.pw * geo.ph; i < n; i++) { d[i * 4] = b[i * 3]; d[i * 4 + 1] = b[i * 3 + 1]; d[i * 4 + 2] = b[i * 3 + 2]; d[i * 4 + 3] = geo.bin[i] >= 0 ? 255 : 0; } });
+    else if (cam.video && !ui.playing && !ui.busy) {
+      if (!ui.fgCache || ui.fgCache.frame !== cam.frame || ui.fgCache.geo !== geo) { const h = measure(grabBand(geo), geo, true); ui.fgCache = { frame: cam.frame, geo, mask: h.mask, h }; }
+      const mk = ui.fgCache.mask;
+      overlayImage(ctx, T, s, geo, d => { for (let i = 0, n = geo.pw * geo.ph; i < n; i++) if (mk[i]) { d[i * 4] = 255; d[i * 4 + 1] = 40; d[i * 4 + 2] = 60; d[i * 4 + 3] = 200; } });
+    }
+  }
+  const yellow = cssVar('--s4'), blue = '#5aa2f0', pink = cssVar('--s5');
+  // 追跡する帯
+  if (geo && $('showBand').checked) {
+    ctx.save(); ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1.3; ctx.beginPath();
+    geo.poly.forEach(([u, v], i) => { const [x, y] = T(u, v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath(); ctx.stroke(); ctx.restore();
+  }
+  // 距離の目盛り
+  if (m && $('showAxis').checked) {
+    const dA = Math.ceil(m.dRange[0] - st.band.before), dB = Math.floor(m.dRange[1] + st.band.after);
+    const A = T(...m.toImage(dA, 0)), B = T(...m.toImage(dB, 0));
+    ctx.strokeStyle = 'rgba(255,214,10,.85)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B); ctx.stroke();
+    for (let d = dA; d <= dB; d++) {
+      const big = d % 5 === 0; const p = T(...m.toImage(d, 0)), q = T(...m.toImage(d, big ? 0.35 : 0.15));
+      ctx.strokeStyle = big ? '#ffd60a' : 'rgba(255,214,10,.7)'; ctx.lineWidth = big ? 2 : 1.2; ctx.beginPath(); ctx.moveTo(...p); ctx.lineTo(...q); ctx.stroke();
+      if (big && s * m.scaleAt(m.Finv(d)) * 5 > 34) label(ctx, q[0], q[1] - 12, `${d}`, '#ffd60a', 'center');
+    }
+  }
+  // マーカー
+  st.mk.rows.forEach((r, i) => {
+    for (const w of ['p', 'q']) {
+      if (w === 'q' && !st.mk.pair) continue; const P = r[w]; if (!P) continue;
+      const [x, y] = T(P[0], P[1]); const sel = ui.pick && ui.pick.row === i && ui.pick.which === w;
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.lineTo(x + 8, y); ctx.moveTo(x, y - 8); ctx.lineTo(x, y + 8); ctx.stroke();
+      ctx.strokeStyle = sel ? '#ffffff' : yellow; ctx.lineWidth = 1.6; ctx.stroke();
+      if (w === 'p') label(ctx, x + 8, y + 16, `${fin(r.d) ? fmtD(r.d) : '?'} m`, yellow);
+    }
+    if (st.mk.pair && r.p && r.q) { const a = T(...r.p), b = T(...r.q); ctx.strokeStyle = 'rgba(255,214,10,.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); }
+  });
+  // 走者の位置
+  const res = st.res, d = st.data;
+  if (m && d && $('showTrack').checked) {
+    const j = cam.frame;
+    // 軌跡（過去 0.8 秒）
+    ctx.save(); ctx.globalAlpha = 0.7; ctx.fillStyle = blue;
+    for (let k = Math.max(0, j - Math.round(0.8 * cam.fpsCap)); k < j; k++) { const q = st.manual[k] || (d.flag[k] === 1 || d.flag[k] === 5 ? [d.u[k], d.v[k]] : null); if (!q) continue; const [x, y] = T(q[0], q[1]); ctx.fillRect(x - 1, y - 1, 2, 2); }
+    ctx.restore();
+    const man = st.manual[j], q = man || (d.flag[j] ? [d.u[j], d.v[j]] : null);
+    if (q && fin(q[0])) {
+      const col = man ? pink : d.flag[j] === 1 ? blue : d.flag[j] === 5 ? cssVar('--s7') : cssVar('--s2');
+      const sx = m.S(q[0], q[1]), k = m.scaleAt(sx), [cx, cy] = m.origin, [ux, uy] = m.u, [nx, ny] = m.nrm;
+      const base = [cx + sx * ux, cy + sx * uy], top = [base[0] + nx * st.band.above * k, base[1] + ny * st.band.above * k];
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(...T(...base)); ctx.lineTo(...T(...top)); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+      const [x, y] = T(q[0], q[1]); ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#000'; ctx.stroke();
+      const ri = j - st.range.start;
+      const xm = m.F(sx), vv = res && ri >= 0 && ri < res.N ? res.v[ri] : NaN;
+      const tt = T(...top); label(ctx, tt[0] + 6, tt[1] - 6, `${xm.toFixed(2)} m${fin(vv) ? `  ${vv.toFixed(2)} m/s` : ''}${man ? '（手動）' : d.flag[j] === 4 ? '（不採用）' : d.flag[j] === 5 ? '（重なりを補正）' : ''}`, col);
+    }
+  }
+  if (st.trk.init && !st.data) { const [x, y] = T(...st.trk.init); ctx.strokeStyle = pink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke(); }
+  // 情報
+  const rt = relT(cam.frame);
+  label(ctx, 10, 18, `F ${cam.frame} ・ ${fin(rt) ? (rt >= 0 ? '+' : '') + rt.toFixed(3) + ' s' : (cam.frame / cam.fpsCap).toFixed(3) + ' s'}`, '#e8e7e2');
+  if (ui.view !== 'video') label(ctx, 10, 42, ui.view === 'bg' ? '背景（走者がいない画像）' : BG ? '前景（赤＝検出された部分）' : '前景：追跡を一度実行すると表示されます', '#e8e7e2');
+  // ルーペ
+  if (ui.pointer && (ui.pick || ui.manClick)) {
+    const [px, py] = ui.pointer, src = 36, dst = 168, mm = 8, dx = px < 220 && py < 220 ? W - dst - mm : mm;
+    ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(cv, (px - src / 2) * dpr, (py - src / 2) * dpr, src * dpr, src * dpr, dx, mm, dst, dst); ctx.strokeStyle = '#f0efec'; ctx.lineWidth = 2; ctx.strokeRect(dx, mm, dst, dst); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(dx + dst / 2, mm + 8); ctx.lineTo(dx + dst / 2, mm + dst - 8); ctx.moveTo(dx + 8, mm + dst / 2); ctx.lineTo(dx + dst - 8, mm + dst / 2); ctx.stroke(); ctx.restore();
+  }
+}
+function updateHint() {
+  const h = $('modeHint'); let msg = '';
+  if (ui.pick && ui.pick.row != null) { const r = st.mk.rows[ui.pick.row]; msg = `${fin(r.d) ? fmtD(r.d) : '?'} m の目印の${st.mk.pair ? (ui.pick.which === 'p' ? '「手前」' : '「奥」') : ''}根元をクリック（Esc で終了）`; }
+  else if (ui.pick === 'runner') msg = '走者の体の中心をクリック';
+  else if (ui.manClick) msg = '走者の体の中心（腰のあたり）をクリックして修正';
+  h.hidden = !msg; h.textContent = msg;
+}
+function cancelModes() {
+  ui.pick = null; ui.manClick = false;
+  $('manClick').textContent = 'クリックで修正：OFF'; $('manClick').classList.remove('on');
+  renderMk(); updateHint(); draw();
+}
+function bindViewer() {
+  const cv = $('view');
+  new ResizeObserver(() => { draw(); drawCov(); }).observe(cv);
+  const loc = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const toImg = (x, y) => [(x - ui.tf.ox) / ui.tf.s, (y - ui.tf.oy) / ui.tf.s];
+  const R1 = q => Math.round(q * 10) / 10;
+  cv.addEventListener('wheel', e => { if (!ui.tf) return; e.preventDefault(); const [cx, cy] = loc(e); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, cx, cy); }, { passive: false });
+  cv.addEventListener('pointerleave', () => { ui.pointer = null; draw(); });
+  cv.addEventListener('pointerdown', e => {
+    if (!ui.tf) return; const [x, y] = loc(e); cv.setPointerCapture(e.pointerId);
+    const [u, v] = toImg(x, y); const inside = u >= 0 && v >= 0 && u <= cam.w && v <= cam.h;
+    if (e.button === 0 && inside) {
+      if (ui.pick && ui.pick.row != null) {
+        const r = st.mk.rows[ui.pick.row]; r[ui.pick.which] = [R1(u), R1(v)];
+        const nx = nextUnset(ui.pick.row, ui.pick.which); ui.pick = nx;
+        computeMap(); BG = null; compute(); renderMk(); updateHint(); draw(); return;
+      }
+      if (ui.pick === 'runner') { st.trk.init = [R1(u), R1(v)]; ui.pick = null; updateManInfo(); updateHint(); draw(); toast('走者の位置を設定しました'); return; }
+      if (ui.manClick) { st.manual[cam.frame] = [R1(u), R1(v)]; updateManInfo(); compute(); const stp = parseInt($('manStep').value) || 0; if (stp > 0) showFrame(cam.frame + stp); else draw(); return; }
+      // 目印のドラッグ
+      let best = null, bd = 12;
+      st.mk.rows.forEach((r, i) => ['p', 'q'].forEach(w => { const P = r[w]; if (!P || (w === 'q' && !st.mk.pair)) return; const dd = Math.hypot(ui.tf.ox + P[0] * ui.tf.s - x, ui.tf.oy + P[1] * ui.tf.s - y); if (dd < bd) { bd = dd; best = { row: i, which: w }; } }));
+      if (best) { ui.drag = { type: 'mk', ...best }; return; }
+    }
+    ui.drag = { type: 'pan', x, y, px: ui.panX, py: ui.panY };
+  });
+  cv.addEventListener('pointermove', e => {
+    const [x, y] = loc(e); ui.pointer = [x, y]; const d = ui.drag;
+    if (d && d.type === 'pan') { if (ui.zoom > 1) { ui.panX = d.px + x - d.x; ui.panY = d.py + y - d.y; } draw(); return; }
+    if (d && d.type === 'mk') { const [u, v] = toImg(x, y); st.mk.rows[d.row][d.which] = [R1(u), R1(v)]; d.moved = true; computeMap(); draw(); return; }
+    if (ui.pick || ui.manClick) draw();
+  });
+  const end = () => { if (ui.drag && ui.drag.type === 'mk' && ui.drag.moved) { BG = null; compute(); } ui.drag = null; };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+}
+function zoomAt(f, cx, cy) {
+  const t = ui.tf; if (!t) return; if (cx === undefined) { cx = t.W / 2; cy = t.H / 2; }
+  const nz = clamp(ui.zoom * f, 1, 40), r = nz / ui.zoom, s0 = t.s / ui.zoom;
+  const nox = cx - (cx - t.ox) * r, noy = cy - (cy - t.oy) * r;
+  ui.zoom = nz; ui.panX = nz === 1 ? 0 : nox - (t.W - cam.w * s0 * nz) / 2; ui.panY = nz === 1 ? 0 : noy - (t.H - cam.h * s0 * nz) / 2; draw();
+}
+
+/* ---------- 出力 ---------- */
+const nv = (x, d = 4) => fin(x) ? Number(x.toFixed(d)) : null;
+function resultRows() {
+  const r = st.res, goal = st.map.dRange[1], rows = [['項目', '値', '単位', '説明']];
+  const add = (k, v, u, d) => rows.push([k, nv(v), u, d || '']);
+  rows.push(['時間の基準', refName(r), '', r.mode === 'onset' ? `動き出し：${{ manual: '手動で指定', model: '指数モデルの開始時刻', disp: '変位から推定' }[r.onsetSrc] || ''}` : '']);
+  add(`${goal} m タイム`, r.goalSplit && r.goalSplit.t, 's', `体の中心（シルエットの中心）が ${goal} m を通過するまで`);
+  add('最高速度', r.vmax, 'm/s', `平滑化（${st.cutoff} Hz）した速度の最大`); add('最高速度（時速）', r.vmax * 3.6, 'km/h');
+  add('最高速度の地点', r.xAtVmax, 'm'); add('最高速度の時刻', r.tAtVmax, 's');
+  if (r.goalSplit && fin(r.goalSplit.t) && r.mode !== 'video') add(`平均速度（0〜${goal} m）`, goal / r.goalSplit.t, 'm/s');
+  if (r.d95) { add('最高速度の95%以上：始まり', r.d95[0], 'm'); add('最高速度の95%以上：終わり', r.d95[1], 'm'); }
+  if (fin(r.reaction)) add('合図→動き出し', r.reaction, 's', '反応時間の目安');
+  if (r.model) {
+    const M = r.model; add('モデル：最大速度 vmax', M.vmax, 'm/s', 'x(t) = x0 + vmax·(t − τ(1 − e^(−t/τ)))'); add('モデル：時定数 τ', M.tau, 's'); add('モデル：最初の加速度', M.amax, 'm/s²', 'vmax / τ');
+    add('モデル：開始時刻', M.t0, 's', '時間の基準から'); add('モデル：当てはめ誤差', M.rmse * 100, 'cm', `RMS（${M.n} 点）`); add('モデル：決定係数', M.r2, '');
+  }
+  if (r.fv) {
+    const F = r.fv; add('F0', F.F0kg, 'N/kg', `${F.F0.toFixed(1)} N（Samozino et al. 2016）`); add('V0', F.V0, 'm/s'); add('Pmax', F.Pmaxkg, 'W/kg', `${F.Pmax.toFixed(0)} W`);
+    add('F–v の傾き', F.Sfv, 'N·s/m/kg'); add('RFmax', F.RFmax, '%'); add('DRF', F.DRF, '%/(m/s)'); add('空気抵抗係数 k', F.k, 'kg/m', `空気密度 ${F.rho.toFixed(3)} kg/m³、前面面積 ${F.Af.toFixed(3)} m²`);
+  }
+  return rows;
+}
+function splitRows() {
+  const rows = [['区間の始め', '区間の終わり', '通過タイム', '区間タイム', '区間平均速度', '通過時の速度'], ['m', 'm', 's', 's', 'm/s', 'm/s']];
+  for (const s of st.res.splits) rows.push([s.from ?? null, s.d, nv(s.t), nv(s.seg), nv(s.segV), nv(s.v)]);
+  return rows;
+}
+function distRows() {
+  const rows = [['距離', '時間', '速度', 'モデルの速度', '加速度'], ['m', 's', 'm/s', 'm/s', 'm/s²']];
+  for (const q of SL.byDistance(st.res, 0.5)) rows.push([q.d, nv(q.t), nv(q.v), nv(q.vModel), nv(q.a)]);
+  return rows;
+}
+function seriesRows() {
+  const r = st.res, d = st.data;
+  const rows = [['フレーム', '時間', '状態', '位置（追跡）', '位置（平滑化）', '速度', '加速度', '速度（6 Hz）', 'モデルの速度', '画像 u', '画像 v'], ['', 's', '', 'm', 'm', 'm/s', 'm/s²', 'm/s', 'm/s', 'px', 'px']];
+  const fl = { 0: '', 1: '自動', 2: '手動', 3: '除外' };
+  for (let i = 0; i < r.N; i++) {
+    const j = st.range.start + i, q = st.manual[j] || (d && d.flag[j] ? [d.u[j], d.v[j]] : null);
+    const state = fin(r.raw[i]) ? fl[r.flag[i]] : fin(r.filled[i]) ? '補間' : r.flag[i] === 1 ? '外れ値' : fl[r.flag[i]] || '';
+    rows.push([j, nv(r.t[i], 5), state, nv(r.raw[i]), nv(r.xf[i]), nv(r.v[i]), nv(r.a[i]), nv(r.v6[i]), nv(r.vModel[i]), q ? nv(q[0], 1) : null, q ? nv(q[1], 1) : null]);
+  }
+  return rows;
+}
+function settingRows() {
+  const m = st.map, rows = [['項目', '値'], ['アプリ', `SprintLab ${APP_VERSION}`], ['出力日時', new Date().toLocaleString()], ['動画', cam.fileName], ['解像度', `${cam.w}×${cam.h}`], ['ファイルのfps', cam.fpsFile], ['撮影fps', cam.fpsCap],
+    ['解析範囲', `F${st.range.start}〜F${st.range.end}`], ['距離の換算', { linear: '直線', proj: '透視補正（1次元の射影変換）', spline: '透視補正＋自然3次スプライン' }[m.kind]], ['マーカーの置き方', st.mk.pair ? 'レーンの手前と奥（中点を使用）' : '走るライン上'],
+    ['マーカーの当てはめ誤差 (cm)', m.rms != null ? Number((m.rms * 100).toFixed(2)) : ''], ['走者の位置', '背景差分で検出したシルエットの中心を、走路の軸に投影'], ['検出のしきい値', st.trk.thr], ['影を除く', st.trk.shadow ? 'はい' : 'いいえ'],
+    ['背景', st.trk.bg === 'median' ? '動画全体の25コマの中央値' : `F${st.trk.bgFrame}`], ['平滑化', `4次 Butterworth（位相遅れなし）${st.cutoff} Hz`], ['区間タイムの通過判定', '6 Hz で平滑化した位置'],
+    ['合図', fin(st.tref.signal) ? `F${st.tref.signal.toFixed(1)}（音の遅れの補正 ${st.soundDist} m）` : ''], ['手動の修正', `${Object.keys(st.manual).length} コマ`], ['除外区間', st.excl.map(([a, b]) => `F${a}-F${b}`).join(', ')],
+    ['体重 (kg)', st.ath.mass || ''], ['身長 (m)', st.ath.height || ''], ['気温 (℃)', st.ath.temp], ['気圧 (hPa)', st.ath.press], ['風速 (m/s, 追い風+)', st.ath.wind]];
+  rows.push(['', ''], ['マーカー', '距離 (m) ／ 手前 u,v ／ 奥 u,v ／ 誤差 (cm)']);
+  st.mk.rows.forEach(r => { const q = m.residuals.find(x => Math.abs(x.d - r.d) < 1e-9); rows.push([`${r.d} m`, `${r.p ? r.p.join(', ') : '—'} ／ ${st.mk.pair && r.q ? r.q.join(', ') : '—'} ／ ${q ? (q.res * 100).toFixed(2) : '—'}`]); });
+  return rows;
+}
+function trialRows() {
+  const ds = [...new Set(st.trials.flatMap(q => q.splits.map(s => s.d)))].sort((a, b) => a - b);
+  const rows = [['試技', '時間の基準', '最高速度 (m/s)', '最高速度の地点 (m)', ...ds.map(d => `${fmtD(d)} m 通過 (s)`), 'モデル vmax', 'モデル τ', 'F0 (N/kg)', 'V0 (m/s)', 'Pmax (W/kg)', '追加日時']];
+  for (const q of st.trials) rows.push([q.name, q.ref, nv(q.vmax), nv(q.xAtVmax), ...ds.map(d => { const s = q.splits.find(x => Math.abs(x.d - d) < 1e-6); return s ? nv(s.t) : null; }), q.model ? nv(q.model.vmax) : null, q.model ? nv(q.model.tau) : null, q.fv ? nv(q.fv.F0kg) : null, q.fv ? nv(q.fv.V0) : null, q.fv ? nv(q.fv.Pmaxkg) : null, q.date]);
+  return rows;
+}
+async function exportXlsx() {
+  if (!st.res) { toast('結果がありません（距離の基準と追跡を行ってください）'); return; }
+  const sheets = [
+    { name: '結果', rows: resultRows(), headerRows: 1, widths: [28, 12, 10, 60] },
+    { name: '区間タイム', rows: splitRows(), headerRows: 2, widths: [12, 12, 12, 12, 14, 14] },
+    { name: '距離ごと', rows: distRows(), headerRows: 2, freeze: { rows: 2 } },
+    { name: '時系列', rows: seriesRows(), headerRows: 2, freeze: { rows: 2, cols: 2 } },
+    { name: '設定', rows: settingRows(), headerRows: 1, widths: [26, 70] }];
+  if (st.trials.length) sheets.push({ name: '比較', rows: trialRows(), headerRows: 1 });
+  const buf = await C.buildXlsx(sheets);
+  await saveFile(`sprint_${stamp()}.xlsx`, buf, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+function projectJSON() {
+  const d = st.data;
+  return { type: 'SprintLabProject', version: APP_VERSION, savedAt: new Date().toISOString(),
+    cam: { fileName: cam.fileName, w: cam.w, h: cam.h, dur: cam.dur, fpsFile: cam.fpsFile, fpsCap: cam.fpsCap, fpsCapSet: cam.fpsCapSet, n: cam.n },
+    mk: st.mk, band: st.band, trk: st.trk, range: st.range, manual: st.manual, excl: st.excl, tref: st.tref, soundDist: st.soundDist, cutoff: st.cutoff, splitStep: st.splitStep, ath: st.ath,
+    data: d ? { n: d.n, u: toB64(d.u), v: toB64(d.v), flag: toB64(d.flag) } : null, trials: st.trials };
+}
+function loadProject(o) {
+  if (!o || o.type !== 'SprintLabProject') throw new Error('プロジェクトファイルの形式が違います');
+  const keep = cam.video && cam.w === o.cam.w && cam.h === o.cam.h;
+  if (!keep && cam.video) { cam.video.remove(); cam.video = null; cam.file = null; }
+  Object.assign(cam, { fileName: keep ? cam.fileName : o.cam.fileName, w: o.cam.w, h: o.cam.h, dur: o.cam.dur, fpsFile: o.cam.fpsFile, fpsCap: o.cam.fpsCap, fpsCapSet: o.cam.fpsCapSet, n: o.cam.n, shown: -1 });
+  Object.assign(st, { mk: o.mk, band: o.band, trk: o.trk, range: o.range, manual: o.manual || {}, excl: o.excl || [], tref: o.tref, soundDist: o.soundDist || 0, cutoff: o.cutoff, splitStep: o.splitStep, ath: o.ath });
+  st.data = o.data ? { n: o.data.n, u: fromB64(o.data.u, Float32Array), v: fromB64(o.data.v, Float32Array), flag: fromB64(o.data.flag, Uint8Array) } : null;
+  if (Array.isArray(o.trials) && o.trials.length) { const ids = new Set(st.trials.map(q => q.id)); for (const q of o.trials) if (!ids.has(q.id)) st.trials.push(q); saveTrials(); }
+  BG = null; geoCache = null;
+  syncSettings(); syncVideoInputs(); renderRange(); renderExcl(); updateManInfo(); computeMap(); compute(); showFrame(cam.frame);
+  toast(keep ? 'プロジェクトを開きました' : `プロジェクトを開きました。映像を見るには動画（${o.cam.fileName}）を読み込んでください`, 5000);
+}
+function syncSettings() {
+  const set = (n, v) => document.querySelectorAll(`input[name=${n}]`).forEach(r => r.checked = r.value === String(v));
+  set('mkPair', st.mk.pair ? 1 : 0); $('mapMethod').value = st.mk.method;
+  $('bAbove').value = st.band.above; $('bBelow').value = st.band.below; $('bBefore').value = st.band.before; $('bAfter').value = st.band.after;
+  $('thr').value = st.trk.thr; $('shadow').checked = st.trk.shadow; set('bgMode', st.trk.bg); $('every').value = String(st.trk.every);
+  set('tref', st.tref.mode); $('soundDist').value = st.soundDist; $('cutoff').value = st.cutoff; set('split', st.splitStep);
+  $('mass').value = st.ath.mass || ''; $('height').value = st.ath.height || ''; $('temp').value = st.ath.temp; $('press').value = st.ath.press; $('wind').value = st.ath.wind;
+}
+
+/* ---------- イベント登録 ---------- */
+function bind() {
+  document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x === b)); document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab)); if (b.dataset.tab === 'time') drawAudio(); }));
+  $('file0').addEventListener('change', e => { loadVideo(e.target.files[0]); e.target.value = ''; });
+  $('stage').addEventListener('dragover', e => e.preventDefault());
+  $('stage').addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) loadVideo(f); });
+  $('fpsFile').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!(v > 0)) return; cam.fpsFile = v; if (!cam.fpsCapSet) cam.fpsCap = v; if (cam.dur) cam.n = Math.max(1, Math.floor(cam.dur * v + 1e-3)); syncVideoInputs(); renderRange(); compute(); showFrame(cam.frame); });
+  $('fpsCap').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!(v > 0)) return; cam.fpsCap = v; cam.fpsCapSet = true; syncVideoInputs(); renderRange(); compute(); });
+  $('detectFps').addEventListener('click', detectFps);
+  // タイムライン
+  $('frameSlider').addEventListener('input', e => showFrame(parseInt(e.target.value)));
+  $('btnPrev').addEventListener('click', () => showFrame(cam.frame - 1)); $('btnNext').addEventListener('click', () => showFrame(cam.frame + 1));
+  $('btnPrev10').addEventListener('click', () => showFrame(cam.frame - 10)); $('btnNext10').addEventListener('click', () => showFrame(cam.frame + 10));
+  $('btnPlay').addEventListener('click', togglePlay);
+  $('setStart').addEventListener('click', () => setRange(cam.frame, Math.max(cam.frame, st.range.end)));
+  $('setEnd').addEventListener('click', () => setRange(Math.min(st.range.start, cam.frame), cam.frame));
+  $('rangeStart').addEventListener('change', e => setRange(parseInt(e.target.value) || 0, st.range.end));
+  $('rangeEnd').addEventListener('change', e => setRange(st.range.start, parseInt(e.target.value) || 0));
+  $('covBar').addEventListener('pointerdown', e => { const r = $('covBar').getBoundingClientRect(); showFrame((e.clientX - r.left) / r.width * cam.n); });
+  ['showAxis', 'showBand', 'showTrack'].forEach(id => $(id).addEventListener('change', draw));
+  document.querySelectorAll('#viewMode button').forEach(b => b.addEventListener('click', () => { ui.view = b.dataset.v; document.querySelectorAll('#viewMode button').forEach(x => x.classList.toggle('active', x === b)); ui.fgCache = null; if (ui.view !== 'video' && !BG) toast('背景・前景は、追跡を一度実行すると表示できます'); draw(); }));
+  $('zoomIn').addEventListener('click', () => zoomAt(1.4)); $('zoomOut').addEventListener('click', () => zoomAt(1 / 1.4)); $('zoomReset').addEventListener('click', () => { ui.zoom = 1; ui.panX = ui.panY = 0; draw(); });
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, textarea, select')) return;
+    if (e.key === 'ArrowRight') { showFrame(cam.frame + (e.shiftKey ? 10 : 1)); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { showFrame(cam.frame - (e.shiftKey ? 10 : 1)); e.preventDefault(); }
+    else if (e.key === ' ') { togglePlay(); e.preventDefault(); }
+    else if (e.key === 'Escape') cancelModes();
+  });
+  // 距離
+  document.querySelectorAll('input[name=mkPair]').forEach(r => r.addEventListener('change', () => { st.mk.pair = r.value === '1'; computeMap(); BG = null; compute(); draw(); }));
+  $('mapMethod').addEventListener('change', e => { st.mk.method = e.target.value; computeMap(); BG = null; compute(); draw(); });
+  $('mkAdd').addEventListener('click', () => { const ds = st.mk.rows.map(r => r.d).filter(fin); const last = ds.length ? Math.max(...ds) : 0; const mid = ds.length >= 2 ? null : null; st.mk.rows.push({ d: mid ?? last + 10, p: null, q: null }); st.mk.rows.sort((a, b) => (fin(a.d) ? a.d : 1e9) - (fin(b.d) ? b.d : 1e9)); computeMap(); });
+  $('mkPickAll').addEventListener('click', () => { const nx = nextUnset(-1, 'q'); if (!nx) { toast('すべての点を指定済みです。点はドラッグで動かせます'); return; } startPick(nx.row, nx.which); });
+  $('mapMethod').value = st.mk.method;
+  const bandIn = (id, k) => $(id).addEventListener('change', e => { const v = parseFloat(e.target.value); if (!(v >= 0)) return; st.band[k] = v; BG = null; draw(); });
+  bandIn('bAbove', 'above'); bandIn('bBelow', 'below'); bandIn('bBefore', 'before'); bandIn('bAfter', 'after');
+  // 追跡
+  $('thr').addEventListener('change', e => { st.trk.thr = clamp(parseFloat(e.target.value) || 30, 5, 120); ui.fgCache = null; draw(); });
+  $('shadow').addEventListener('change', e => { st.trk.shadow = e.target.checked; ui.fgCache = null; draw(); });
+  document.querySelectorAll('input[name=bgMode]').forEach(r => r.addEventListener('change', () => { st.trk.bg = r.value; if (r.value === 'frame') { st.trk.bgFrame = cam.frame; toast(`F${cam.frame} を背景にします（走者が写っていない場面を選んでください）`); } BG = null; }));
+  $('every').addEventListener('change', e => st.trk.every = parseInt(e.target.value) || 0);
+  $('pickRunner').addEventListener('click', () => { cancelModes(); ui.pick = 'runner'; updateHint(); });
+  $('runTrack').addEventListener('click', () => runTrack());
+  $('cancelTrack').addEventListener('click', () => ui.cancel = true);
+  $('manClick').addEventListener('click', () => { const on = !ui.manClick; cancelModes(); ui.manClick = on; $('manClick').textContent = on ? 'クリックで修正：ON' : 'クリックで修正：OFF'; $('manClick').classList.toggle('on', on); updateHint(); draw(); });
+  $('manDel').addEventListener('click', () => { delete st.manual[cam.frame]; updateManInfo(); compute(); });
+  $('retrack').addEventListener('click', () => { if (!st.data) { runTrack(); return; } runTrack(cam.frame); });
+  $('exA').addEventListener('click', () => { st.exA = cam.frame; renderExcl(); });
+  $('exB').addEventListener('click', () => { if (!fin(st.exA)) { toast('先に「開始＝現在」を押してください'); return; } const a = Math.min(st.exA, cam.frame), b = Math.max(st.exA, cam.frame); st.excl.push([a, b]); st.exA = null; renderExcl(); updateManInfo(); compute(); });
+  // 時間
+  document.querySelectorAll('input[name=tref]').forEach(r => r.addEventListener('change', () => { st.tref.mode = r.value; compute(); }));
+  $('onsetSet').addEventListener('click', () => { st.tref.onset = cam.frame; compute(); toast(`F${cam.frame} を動き出しにしました`); });
+  $('onsetAuto').addEventListener('click', () => { st.tref.onset = null; compute(); });
+  $('onsetGo').addEventListener('click', () => { const r = st.res; if (r && fin(r.onsetIdx)) showFrame(st.range.start + r.onsetIdx); });
+  $('signalSet').addEventListener('click', () => { st.tref.signal = cam.frame; if (st.tref.mode === 'auto') { st.tref.mode = 'signal'; syncSettings(); } compute(); toast(`F${cam.frame} を合図にしました`); });
+  $('signalAudio').addEventListener('click', findSignal);
+  $('signalGo').addEventListener('click', () => { if (fin(st.tref.signal)) showFrame(st.tref.signal); });
+  $('signalDel').addEventListener('click', () => { st.tref.signal = null; if (st.tref.mode === 'signal') { st.tref.mode = 'auto'; syncSettings(); } if (ui.audio) ui.audio.tSig = null; compute(); });
+  $('soundDist').addEventListener('change', e => { const old = st.soundDist || 0; st.soundDist = Math.max(0, parseFloat(e.target.value) || 0); if (fin(st.tref.signal) && ui.audio && fin(ui.audio.tSig)) { st.tref.signal = Math.max(0, ui.audio.tSig * cam.fpsFile - st.soundDist / 343 * cam.fpsCap); } else if (fin(st.tref.signal) && old !== st.soundDist) toast('手動で設定した合図には音の遅れの補正はかかりません'); compute(); });
+  $('cutoff').addEventListener('change', e => { st.cutoff = clamp(parseFloat(e.target.value) || 2, 0.5, 10); e.target.value = st.cutoff; compute(); });
+  document.querySelectorAll('input[name=split]').forEach(r => r.addEventListener('change', () => { st.splitStep = parseFloat(r.value); compute(); }));
+  const ath = (id, k) => $(id).addEventListener('change', e => { const v = parseFloat(e.target.value); st.ath[k] = fin(v) ? v : (k === 'mass' || k === 'height' ? null : st.ath[k]); compute(); });
+  ath('mass', 'mass'); ath('height', 'height'); ath('temp', 'temp'); ath('press', 'press'); ath('wind', 'wind');
+  // 結果
+  document.querySelectorAll('#xAxis button').forEach(b => b.addEventListener('click', () => { st.xAxis = b.dataset.x; document.querySelectorAll('#xAxis button').forEach(x => x.classList.toggle('active', x === b)); ui.hover = {}; drawCharts(); }));
+  ['showDetail', 'showModel', 'showSeg', 'showTrials'].forEach(id => $(id).addEventListener('change', drawCharts));
+  $('trialAdd').addEventListener('click', addTrial);
+  // 保存
+  $('exXlsx').addEventListener('click', exportXlsx);
+  $('exCsv').addEventListener('click', () => { if (!st.res) { toast('結果がありません'); return; } saveFile(`sprint_series_${stamp()}.csv`, C.toCSV(seriesRows()), 'text/csv'); });
+  $('exChart').addEventListener('click', () => { const src = $('chV'); const W = src.width, H = src.height, pad = Math.round(40 * (window.devicePixelRatio || 1)); const c = document.createElement('canvas'); c.width = W; c.height = H + pad; const x = c.getContext('2d'); x.fillStyle = cssVar('--surface'); x.fillRect(0, 0, c.width, c.height); x.fillStyle = cssVar('--text'); x.font = `700 ${Math.round(14 * (window.devicePixelRatio || 1))}px ${cssVar('--font')}`; x.textBaseline = 'middle'; x.fillText(`疾走速度曲線 ・ ${cam.fileName}${st.res ? ` ・ 最高 ${st.res.vmax.toFixed(2)} m/s` : ''}`, pad / 2, pad / 2); x.drawImage(src, 0, pad); c.toBlob(b => saveFile(`sprint_curve_${stamp()}.png`, b), 'image/png'); });
+  $('exView').addEventListener('click', () => { const p = ui.pointer; ui.pointer = null; draw(); $('view').toBlob(b => saveFile(`sprint_view_${stamp()}.png`, b), 'image/png'); ui.pointer = p; });
+  $('projSave').addEventListener('click', () => saveFile(`sprint_project_${stamp()}.json`, JSON.stringify(projectJSON()), 'application/json'));
+  $('projLoad').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { loadProject(JSON.parse(await readText(f))); } catch (err) { toast(err.message, 5000); } });
+}
+
+loadTrials();
+bind(); bindViewer(); bindCharts();
+syncSettings(); syncVideoInputs(); renderRange(); renderExcl(); updateManInfo(); computeMap(); updateTimeline(); draw(); compute();
+getDl();
+window.SLApp = { cam, st, ui, compute, computeMap, showFrame, loadVideo, runTrack, setRange, findSignal, addTrial, exportXlsx, SL, C, getGeo, get BG() { return BG; } };
+})();
+</script>
+</body>
+</html>
