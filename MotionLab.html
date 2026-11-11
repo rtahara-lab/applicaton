@@ -362,16 +362,18 @@ body.mode-3d .only2d { display: none !important; }
         <div class="radio-row" id="calib2dMethod">
           <label><input type="radio" name="c2m" value="none" checked> なし（px）</label>
           <label><input type="radio" name="c2m" value="scale"> 2点スケール</label>
+          <label><input type="radio" name="c2m" value="vscale"> 鉛直の2点</label>
           <label><input type="radio" name="c2m" value="plane"> 平面射影（4点以上）</label>
         </div>
         <div id="c2scale" hidden>
-          <p class="note">長さが既知の2点（例：床に置いた1mのバー、ラインの間隔）をクリックし、実長を入力します。原点は P1、Y軸は鉛直上向き（画面上方向）です。</p>
+          <p class="note" id="sNoteH">長さが既知の2点（例：床に置いた1mのバー、ラインの間隔）をクリックし、実長を入力します。原点は P1、Y軸は鉛直上向き（画面上方向）です。</p>
+          <p class="note" id="sNoteV" hidden>鉛直に立てた棒（ポール・メジャー・標尺など）の、高さの差が既知の2点をクリックし、その差を入力します。<b>P1（下）→ P2（上）の向きを鉛直上（Y軸）</b>とし、X軸はそれに垂直な水平方向になります。カメラが少し傾いていても、鉛直が正しくそろいます。棒は運動する面の上に立ててください。</p>
           <table class="tbl"><thead><tr><th>点</th><th>u (px)</th><th>v (px)</th><th></th></tr></thead><tbody>
-            <tr><td>P1（原点）</td><td class="mono" id="sP1u">—</td><td class="mono" id="sP1v">—</td><td><button class="btn sm" data-pick="P1">クリックで指定</button></td></tr>
-            <tr><td>P2</td><td class="mono" id="sP2u">—</td><td class="mono" id="sP2v">—</td><td><button class="btn sm" data-pick="P2">クリックで指定</button></td></tr>
+            <tr><td id="sP1lbl">P1（原点）</td><td class="mono" id="sP1u">—</td><td class="mono" id="sP1v">—</td><td><button class="btn sm" data-pick="P1">クリックで指定</button></td></tr>
+            <tr><td id="sP2lbl">P2</td><td class="mono" id="sP2u">—</td><td class="mono" id="sP2v">—</td><td><button class="btn sm" data-pick="P2">クリックで指定</button></td></tr>
           </tbody></table>
-          <div class="field"><label for="sDist">P1–P2 の実長</label><div class="row"><input type="number" id="sDist" step="0.001" min="0" value="1.000"> m</div></div>
-          <label class="note"><input type="checkbox" id="sAlign"> P1→P2 の方向を X 軸（水平）とする（カメラの傾き補正）</label>
+          <div class="field"><label for="sDist" id="sDistLbl">P1–P2 の実長</label><div class="row"><input type="number" id="sDist" step="0.001" min="0" value="1.000"> m</div></div>
+          <label class="note" id="sAlignRow"><input type="checkbox" id="sAlign"> P1→P2 の方向を X 軸（水平）とする（カメラの傾き補正）</label>
         </div>
         <div id="c2plane" hidden>
           <p class="note">運動面上の座標が既知の点（4点以上、直線上に並ばないこと）の実座標 X, Y（m, Y上向き）を入力し、画像上でクリックします。カメラが運動面に斜めでも補正されます。</p>
@@ -555,6 +557,7 @@ body.mode-3d .only2d { display: none !important; }
 <table>
   <tr><th>方式</th><th>必要な情報</th><th>入力方法</th></tr>
   <tr><td>2点スケール（2D）</td><td>長さ既知の2点と実長(m)</td><td>P1・P2を画像上でクリック、実長を入力。P1が原点、Y上向き。「P1→P2をX軸」でカメラの傾きを補正</td></tr>
+  <tr><td>鉛直の2点（2D）</td><td>鉛直に立てた棒などの、高さの差が既知の2点と差(m)</td><td>P1（下）・P2（上）を画像上でクリックし、高さの差を入力。P1→P2 の向きを鉛直上（Y軸）、それに垂直な向きを X 軸とするので、カメラの傾きも補正される。棒は運動面の上に立てる</td></tr>
   <tr><td>平面射影（2D）</td><td>運動面上の4点以上の実座標 X,Y(m)</td><td>表に直接入力またはCSV貼付け → 行を選び画像をクリック（自動で次の点へ）。斜めからの撮影も補正</td></tr>
   <tr><td>DLT法（3D）</td><td>6点以上（同一平面でない）の実座標 X,Y,Z(m)</td><td>表／CSVで入力 → カメラ1・2それぞれ画像をクリック。鉛直軸（Z/Y/X）を指定。既知のDLT係数（L1〜L11）を直接入力することも可</td></tr>
 </table>
@@ -884,10 +887,15 @@ function calibScale(p1, p2, dist, opts = {}) {
   if (!(px > 0) || !(dist > 0)) throw new Error('2点と実長を正しく入力してください');
   const mpp = dist / px;
   // 画像座標(y下向き) → 実座標(Y上向き)
-  let ang = 0;
-  if (opts.alignAxis) ang = Math.atan2(-dy, dx); // P1→P2 を +X 軸に
+  let ang = 0, flipped = false;
+  if (opts.alignAxis === 'vertical') {
+    // 2点を結ぶ線を鉛直（+Y 軸）にする。上向きは画像で上にある点の方向
+    let ux = dx, uy = -dy;
+    if (uy < 0) { ux = -ux; uy = -uy; flipped = true; }
+    ang = Math.atan2(uy, ux) - Math.PI / 2;
+  } else if (opts.alignAxis) ang = Math.atan2(-dy, dx); // P1→P2 を +X 軸に
   const origin = opts.origin || p1;
-  return { type: 'scale', mpp, ang, origin, p1, p2, dist };
+  return { type: 'scale', axis: opts.alignAxis === 'vertical' ? 'vertical' : opts.alignAxis ? 'horizontal' : 'none', mpp, ang, origin, p1, p2, dist, flipped };
 }
 function applyScale(c, u, v) {
   const x = (u - c.origin[0]) * c.mpp, y = -(v - c.origin[1]) * c.mpp;
@@ -2441,11 +2449,19 @@ function drawCross(ctx, x, y, r, color, label) {
 function drawCalibOverlay(ctx, k, T) {
   const cal = state.calib;
   const yellow = cssVar('--s4');
-  if (state.mode === '2d' && k === 0 && cal.m2d === 'scale') {
-    const { P1, P2 } = cal.scale;
+  if (state.mode === '2d' && k === 0 && (cal.m2d === 'scale' || cal.m2d === 'vscale')) {
+    const { P1, P2 } = cal.scale; const isV = cal.m2d === 'vscale';
     if (P1 && P2) { const a = T(...P1), b = T(...P2); ctx.strokeStyle = yellow; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke(); ctx.setLineDash([]); }
-    if (P1) drawCross(ctx, ...T(...P1), 10, yellow, 'P1');
-    if (P2) drawCross(ctx, ...T(...P2), 10, yellow, 'P2');
+    if (P1) drawCross(ctx, ...T(...P1), 10, yellow, isV ? 'P1（下）' : 'P1');
+    if (P2) drawCross(ctx, ...T(...P2), 10, yellow, isV ? 'P2（上）' : 'P2');
+    // 較正後：原点から X・Y 軸の向きを表示
+    const c = cal.c2d;
+    if (c && c.type === 'scale') {
+      const o = T(...c.origin), L = 60;
+      const ax = [Math.cos(c.ang), -Math.sin(c.ang)], ay = [-Math.sin(c.ang), -Math.cos(c.ang)]; // 画像上の X・Y 方向
+      const arrow = (d, col, lab) => { const e = [o[0] + d[0] * L, o[1] + d[1] * L]; ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(...o); ctx.lineTo(...e); ctx.stroke(); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = col; ctx.font = `700 12px ${cssVar('--font')}`; ctx.fillText(lab, e[0] + d[0] * 8 - 4, e[1] + d[1] * 8 + 4); };
+      arrow(ax, '#ff6b6b', 'X'); arrow(ay, '#51cf66', 'Y');
+    }
   }
   const usesCp = state.mode === '3d' || (k === 0 && cal.m2d === 'plane');
   if (!usesCp) return;
@@ -2633,7 +2649,11 @@ function handlePick(k, u, v) {
 function renderCalibUI() {
   const cal = state.calib;
   document.querySelectorAll('input[name=c2m]').forEach(r => r.checked = r.value === cal.m2d);
-  $('c2scale').hidden = cal.m2d !== 'scale';
+  const isV = cal.m2d === 'vscale';
+  $('c2scale').hidden = !(cal.m2d === 'scale' || isV);
+  $('sNoteH').hidden = isV; $('sNoteV').hidden = !isV; $('sAlignRow').hidden = isV;
+  $('sP1lbl').textContent = isV ? 'P1（下・原点）' : 'P1（原点）'; $('sP2lbl').textContent = isV ? 'P2（上）' : 'P2';
+  $('sDistLbl').textContent = isV ? 'P1–P2 の高さの差' : 'P1–P2 の実長';
   $('c2plane').hidden = cal.m2d !== 'plane';
   const showCp = state.mode === '3d' || cal.m2d === 'plane';
   $('cpBlock').hidden = !showCp;
@@ -2704,7 +2724,19 @@ function computeCalibration() {
   const cal = state.calib;
   try {
     if (state.mode === '2d') {
-      if (cal.m2d === 'scale') {
+      if (cal.m2d === 'vscale') {
+        const { P1, P2 } = cal.scale; const dist = parseFloat($('sDist').value);
+        if (!P1 || !P2) throw new Error('P1（下）と P2（上）をクリックで指定してください');
+        cal.scale.dist = dist;
+        cal.c2d = C.calibScale(P1, P2, dist, { alignAxis: 'vertical' });
+        const c = cal.c2d; const cam = state.cams[0];
+        const tilt = c.ang * 180 / Math.PI;
+        const notes = [];
+        if (c.flipped) notes.push('P1 が P2 より上にあったため、画像で上にある点の向きを鉛直上にしました');
+        if (Math.abs(tilt) > 20) notes.push(`2点を結ぶ線が画面の縦から ${Math.abs(tilt).toFixed(0)}° 傾いています。鉛直に並んだ2点か確認してください`);
+        cal.report = { type: 'scale', text: `鉛直の2点：1 px = ${(c.mpp * 1000).toFixed(3)} mm ・ 画面の高さ ${(cam.h * c.mpp).toFixed(3)} m ・ カメラの傾き ${tilt >= 0 ? '' : '−'}${Math.abs(tilt).toFixed(2)}°（補正済み）` + (notes.length ? ' ・ ' + notes.join(' ・ ') : '') };
+        if (notes.length) toast(notes.join('。'), 7000);
+      } else if (cal.m2d === 'scale') {
         const { P1, P2 } = cal.scale; const dist = parseFloat($('sDist').value);
         if (!P1 || !P2) throw new Error('P1 と P2 をクリックで指定してください');
         cal.scale.dist = dist; cal.scale.align = $('sAlign').checked;
@@ -3805,8 +3837,8 @@ function infoRows(r, i0, i1) {
   add('微分', '中心差分（端点は片側差分）');
   add('長さの単位', r.unitL);
   if (r.D === 2) {
-    add('キャリブレーション', cal.m2d === 'scale' ? '2点スケール' : cal.m2d === 'plane' ? '平面射影（2D-DLT）' : 'なし（ピクセル）');
-    add('座標系', 'X: 右向き正、Y: 鉛直上向き正' + (cal.m2d === 'scale' ? '、原点 P1' : cal.m2d === 'plane' ? '、較正点の座標系' : '、原点は画像左上'));
+    add('キャリブレーション', cal.m2d === 'scale' ? '2点スケール' : cal.m2d === 'vscale' ? '鉛直の2点（P1 下 → P2 上 を鉛直上とする）' : cal.m2d === 'plane' ? '平面射影（2D-DLT）' : 'なし（ピクセル）');
+    add('座標系', cal.m2d === 'vscale' ? 'Y: P1→P2 の向き（鉛直上向き正）、X: Y に垂直で右向き正、原点 P1' : 'X: 右向き正、Y: 鉛直上向き正' + (cal.m2d === 'scale' ? '、原点 P1' : cal.m2d === 'plane' ? '、較正点の座標系' : '、原点は画像左上'));
   } else {
     add('キャリブレーション', '3次元DLT法（11パラメータ）'); add('座標系', `較正点の座標系（鉛直上向き: ${cal.up} 軸）`);
   }
@@ -3825,10 +3857,10 @@ function infoRows(r, i0, i1) {
 function calibRows() {
   const cal = state.calib, rows = [];
   if (state.mode === '2d') {
-    rows.push(['方法', cal.m2d === 'scale' ? '2点スケール' : cal.m2d === 'plane' ? '平面射影' : 'なし']);
-    if (cal.m2d === 'scale' && cal.c2d) {
+    rows.push(['方法', cal.m2d === 'scale' ? '2点スケール' : cal.m2d === 'vscale' ? '鉛直の2点' : cal.m2d === 'plane' ? '平面射影' : 'なし']);
+    if ((cal.m2d === 'scale' || cal.m2d === 'vscale') && cal.c2d) {
       const c = cal.c2d;
-      rows.push(['P1 (u, v)', c.p1[0], c.p1[1]], ['P2 (u, v)', c.p2[0], c.p2[1]], ['実長 (m)', c.dist], ['m/px', c.mpp], ['回転角 (°)', c.ang * 180 / Math.PI]);
+      rows.push([cal.m2d === 'vscale' ? 'P1 下 (u, v)' : 'P1 (u, v)', c.p1[0], c.p1[1]], [cal.m2d === 'vscale' ? 'P2 上 (u, v)' : 'P2 (u, v)', c.p2[0], c.p2[1]], [cal.m2d === 'vscale' ? '高さの差 (m)' : '実長 (m)', c.dist], ['m/px', c.mpp], ['回転角 (°)', c.ang * 180 / Math.PI]);
     }
     if (cal.m2d === 'plane') {
       if (cal.c2d && cal.c2d.H) { rows.push(['射影行列 H']); cal.c2d.H.forEach(h => rows.push(['', ...h])); rows.push([]); }
